@@ -75,6 +75,7 @@ struct SidebarState: Equatable {
                 home + "/Library/Mobile Documents/com~apple~CloudDocs",
             ]
             + SidebarTags.values.map { "tag:" + $0.0 }
+            + HomyRoute.sidebarSelectionRoutes  // HOMY
         // An ordinary child folder selects no sidebar row. Moving between such
         // folders should leave the entire sidebar untouched.
         selection = (fixedRoutes + favorites + volumes.map(\.id)).contains(route) ? route : nil
@@ -131,6 +132,7 @@ struct BrowserSidebar: View, Equatable {
                 set: { if let route = $0 { select(route) } }
             )
         ) {
+            HomySidebarSections(select: select)  // HOMY
             Label("Recents", systemImage: "clock").tag("recents")
             Section("Favorites") {
                 ForEach(state.favorites, id: \.self) { path in

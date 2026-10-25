@@ -139,7 +139,8 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         self.folderLoader = folderLoader
         self.folderPreviewLoader = folderPreviewLoader
     }
-    private var task: Task<Void, Never>?
+    // HOMY: internal for the fork's engine-backed routes (see HomyCore.swift).
+    var task: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var mutationError: String?
     @Published private var sortedCache: [Hit]? {
@@ -214,17 +215,21 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         sortedCache = prepared.ordered
         sorting = false
     }
-    private var generation = 0
+    // HOMY: internal so fork routes can invalidate in-flight fetches.
+    var generation = 0
     private var statusStarted = false
     private var watchTask: Task<Void, Never>?
     private var watchGeneration = 0
     private var watcher: DispatchSourceFileSystemObject?
     private var metadata: NSMetadataQuery?
     private var metadataObservers: [NSObjectProtocol] = []
-    var canWriteHere: Bool { !isSearch && route != "recents" && !route.hasPrefix("tag:") }
+    var canWriteHere: Bool {
+        !isSearch && route != "recents" && !route.hasPrefix("tag:") && HomyRoute(route) == nil  // HOMY
+    }
     var isSearch: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var title: String {
-        route == "recents"
+        if let homy = HomyRoute(route) { return homy.title }  // HOMY
+        return route == "recents"
             ? "Recents"
             : route.hasPrefix("tag:")
                 ? String(route.dropFirst(4))
@@ -362,7 +367,7 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
     func sidebar(_ value: String) {
         guard !busy else { return }
         cancelRename()
-        if value == "recents" || value.hasPrefix("tag:") {
+        if value == "recents" || value.hasPrefix("tag:") || HomyRoute(value) != nil {  // HOMY
             saveDefaultSnapshot(); changingLocation = true
         }
         if value == "recents" {
@@ -370,6 +375,10 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
             changingLocation = false; hits = []; schedule()
         } else if value.hasPrefix("tag:") {
             route = value; scope = ""; query = ""; changingLocation = false; hits = []; schedule()
+        } else if let homy = HomyRoute(value) {  // HOMY
+            route = value; scope = ""; query = ""
+            sort = homy.listSort; ascending = homy.listAscending
+            changingLocation = false; hits = []; selection = []; schedule()
         } else {
             navigate(URL(fileURLWithPath: value))
         }
@@ -394,14 +403,18 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         metadata?.stop(); metadata = nil
         metadataObservers.forEach(NotificationCenter.default.removeObserver)
         metadataObservers = []
-        let folder = location, hidden = showHidden, text = query, searchScope = scope,
-            type = fileType
+        // HOMY: category, smart-folder and dashboard routes load themselves.
+        if !searchingNow, let homy = HomyRoute(route) {
+            loadHomy(homy); return
+        }
+        let folder = location, hidden = showHidden, text = HomyQuery.translate(query),  // HOMY
+            searchScope = scope, type = fileType
         let recent = route == "recents" && !isSearch
         loading = !searchingNow && !cached; searching = searchingNow
         searchDebouncing = searchingNow && !immediate
         task = Task {
             do {
-                let result: [Hit]
+                var result: [Hit]  // HOMY: var for source-filtered searches
                 if searchingNow || recent {
                     if searchingNow && !immediate {
                         try await Task.sleep(for: searchDebounce)
@@ -426,6 +439,12 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
                         throw Engine.Failure.message(reply.error ?? "Search failed")
                     }
                     result = reply.hits ?? [];
+                    if searchingNow, HomyQuery.hasSourceFilter(query) {  // HOMY
+                        let fetched = result, raw = query
+                        result = (try? await BackgroundWork.run {
+                            HomyQuery.filterBySource(fetched, rawQuery: raw)
+                        }) ?? fetched
+                    }
                     if revision == generation { elapsed = Double(reply.took_us ?? 0) / 1000 }
                 } else {
                     if !cached {

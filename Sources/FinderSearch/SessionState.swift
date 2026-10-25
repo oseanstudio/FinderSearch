@@ -25,7 +25,9 @@ struct TabSession: Codable, Equatable {
     @MainActor func restore() -> SearchModel {
         let model = SearchModel()
         model.navigate(URL(fileURLWithPath: path, isDirectory: true))
-        if route == "recents" || route.hasPrefix("tag:") { model.sidebar(route) }
+        if route == "recents" || route.hasPrefix("tag:") || HomyRoute(route) != nil {  // HOMY
+            model.sidebar(route)
+        }
         model.scope = scope; model.query = query
         model.viewMode = FileViewMode(rawValue: view) ?? .icons
         model.sort = FileSort(rawValue: sort) ?? .name

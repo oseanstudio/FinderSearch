@@ -15,6 +15,9 @@ import UniformTypeIdentifiers
             }
         }
         .defaultSize(width: 1050, height: 680).windowToolbarStyle(.unified)
+        MenuBarExtra("Downloads", systemImage: "arrow.down.circle") {  // HOMY
+            MenuBarDownloadsView()
+        }
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Window") { openWindow(id: "browser") }.keyboardShortcut("n")
@@ -101,6 +104,9 @@ import UniformTypeIdentifiers
                     NotificationCenter.default.post(name: .focusSearch, object: nil)
                 }.keyboardShortcut("f")
             }
+            CommandMenu("Homy") {  // HOMY
+                HomyCommandMenu(model: model)
+            }
         }
     }
     private func textOrFile(_ selector: String, action: () -> Void) {
@@ -151,7 +157,7 @@ struct BrowserView: View {
         } detail: {
             VStack(spacing: 0) {
                 if workspace.tabs.count > 1 { BrowserTabBar(workspace: workspace) }
-                if model.isSearch { searchScopeBar }
+                if model.isSearch { searchScopeBar; HomySearchChipsBar(model: model) }  // HOMY
                 if let error = model.error {
                     HStack {
                         Image(systemName: "exclamationmark.triangle");
@@ -242,6 +248,7 @@ struct BrowserView: View {
         .onAppear {
             model.start()
             installKeyMonitor()
+            QuickSearchController.shared.installHotkey()  // HOMY
         }
         .onChange(of: model.id) { _, _ in
             keyboardFocus = nil; fileNavigationActive = false
@@ -252,6 +259,12 @@ struct BrowserView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             fileNavigationActive = false; model.sort = .relevance; keyboardFocus = .search
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homyRunSavedSearch)) { note in  // HOMY
+            guard NSApp.keyWindow === browserWindow,
+                let query = note.userInfo?["query"] as? String
+            else { return }
+            model.query = query
         }
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
@@ -349,7 +362,9 @@ struct BrowserView: View {
             Color(nsColor: .controlBackgroundColor))
     }
     @ViewBuilder private var fileContent: some View {
-        if model.viewMode == .columns && model.canWriteHere {
+        if let homy = HomySpecialContent(model: model, workspace: workspace) {  // HOMY
+            homy.id(model.id)
+        } else if model.viewMode == .columns && model.canWriteHere {
             ColumnBrowser(model: model, focusFiles: { focusFiles() }, rowMenu: rowActions).id(
                 model.id)
         } else if (model.loading || model.searching) && model.sortedHits.isEmpty {
@@ -437,10 +452,16 @@ struct BrowserView: View {
             Divider();
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
-                    if !model.isSearch
-                        && (model.route == "recents" || model.route.hasPrefix("tag:"))
+                    if !model.isSearch,
+                        model.route == "recents" || model.route.hasPrefix("tag:")
+                            || HomyRoute(model.route) != nil  // HOMY
                     {
-                        Label(model.title, systemImage: model.route == "recents" ? "clock" : "tag")
+                        Label(
+                            model.title,
+                            systemImage:
+                                model.route == "recents"
+                                ? "clock" : model.route.hasPrefix("tag:")
+                                    ? "tag" : HomyRoute(model.route)?.symbol ?? "house")  // HOMY
                     } else {
                         ForEach(model.ancestors, id: \.path) { url in
                             Button {
