@@ -70,6 +70,7 @@ enum HomySmartFolder: String, CaseIterable, Identifiable {
 /// render as a normal file list; the others own their dashboard-style views.
 enum HomyRoute: Equatable, CaseIterable {
     case home
+    case semantic  // DIGUP: describe-contents search
     case category(HomyCategory)
     case smart(HomySmartFolder)
     case sources
@@ -77,7 +78,7 @@ enum HomyRoute: Equatable, CaseIterable {
     case cleanup
 
     static var allCases: [HomyRoute] {
-        [.home]
+        [.home, .semantic]
             + HomyCategory.allCases.map(HomyRoute.category)
             + HomySmartFolder.allCases.map(HomyRoute.smart)
             + [.sources, .duplicates, .cleanup]
@@ -86,6 +87,7 @@ enum HomyRoute: Equatable, CaseIterable {
     init?(_ route: String) {
         switch route {
         case "home": self = .home
+        case "semantic": self = .semantic
         case "sources": self = .sources
         case "dupes": self = .duplicates
         case "cleanup": self = .cleanup
@@ -107,6 +109,7 @@ enum HomyRoute: Equatable, CaseIterable {
     var route: String {
         switch self {
         case .home: return "home"
+        case .semantic: return "semantic"
         case .category(let category): return "cat:" + category.rawValue
         case .smart(let smart): return "smart:" + smart.rawValue
         case .sources: return "sources"
@@ -122,6 +125,7 @@ enum HomyRoute: Equatable, CaseIterable {
     var title: String {
         switch self {
         case .home: return "Home"
+        case .semantic: return "Describe Contents"
         case .category(let category): return category.title
         case .smart(let smart): return smart.title
         case .sources: return "Downloaded From"
@@ -133,6 +137,7 @@ enum HomyRoute: Equatable, CaseIterable {
     var symbol: String {
         switch self {
         case .home: return "house.fill"
+        case .semantic: return "text.magnifyingglass"
         case .category(let category): return category.symbol
         case .smart(let smart): return smart.symbol
         case .sources: return "globe.desk"
@@ -144,7 +149,7 @@ enum HomyRoute: Equatable, CaseIterable {
     /// Non-nil routes render through the normal file surfaces.
     var engineQuery: String? {
         switch self {
-        case .home, .sources, .duplicates, .cleanup: return nil
+        case .home, .semantic, .sources, .duplicates, .cleanup: return nil
         case .category(let category): return category.query
         case .smart(.large): return "size:>100mb kind:file"
         case .smart(.screenshots): return "Screenshot kind:file"
@@ -208,6 +213,7 @@ struct HomySidebarSections: View {
 
     var body: some View {
     Label("Home", systemImage: "house.fill").tag("home")
+        Label("Describe Contents", systemImage: "text.magnifyingglass").tag("semantic")  // DIGUP
         Section("Categories") {
             ForEach(HomyCategory.allCases) { category in
                 Label(category.title, systemImage: category.symbol)
@@ -261,6 +267,7 @@ struct HomySpecialContent: View {
     var body: some View {
         switch HomyRoute(model.route) {
         case .home: HomeDashboard(model: model)
+        case .semantic: SemanticSearchView(model: model)  // DIGUP
         case .sources: DownloadedFromView(model: model)
         case .duplicates: DuplicatesView(model: model)
         case .cleanup: CleanupView(model: model)

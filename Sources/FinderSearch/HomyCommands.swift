@@ -17,6 +17,9 @@ struct HomyCommandMenu: View {
     var body: some View {
         Button("Quick Search") { QuickSearchController.shared.toggle() }
             .keyboardShortcut(.space, modifiers: [.command, .shift])
+        Button("Describe Contents…") { model?.sidebar("semantic") }  // DIGUP
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+            .disabled(model?.busy != false)
         Divider()
         Button("Home") { model?.sidebar("home") }
             .keyboardShortcut("h", modifiers: [.command, .shift])
@@ -64,6 +67,10 @@ struct HomyCommandMenu: View {
         }
         Button("Switch Theme") { theme.toggle() }
             .keyboardShortcut("t", modifiers: [.command, .control])
+        Divider()
+        Button("Check for Updates…") {  // HOMY
+            NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
+        }
     }
 }
 

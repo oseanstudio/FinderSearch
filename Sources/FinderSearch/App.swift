@@ -129,6 +129,8 @@ struct BrowserRoot: View {
 struct BrowserView: View {
     @ObservedObject var workspace: BrowserWorkspace
     @ObservedObject var model: SearchModel
+    @ObservedObject private var updates = UpdateCenter.shared  // HOMY
+    @State private var showUpdates = false  // HOMY
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
@@ -232,6 +234,9 @@ struct BrowserView: View {
                         Image(systemName: "ellipsis")
                     }.help("Actions")
                 }
+                ToolbarItem {  // HOMY: update badge
+                    updatesBadgeButton
+                }
             }
             .searchable(text: $model.query, placement: .toolbar, prompt: "Search")
             .searchFocused($keyboardFocus, equals: .search)
@@ -249,6 +254,7 @@ struct BrowserView: View {
             model.start()
             installKeyMonitor()
             QuickSearchController.shared.installHotkey()  // HOMY
+            updates.startMonitoring()  // HOMY
         }
         .onChange(of: model.id) { _, _ in
             keyboardFocus = nil; fileNavigationActive = false
@@ -265,6 +271,12 @@ struct BrowserView: View {
                 let query = note.userInfo?["query"] as? String
             else { return }
             model.query = query
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homyShowUpdates)) { _ in  // HOMY
+            showUpdates = true
+        }
+        .sheet(isPresented: $showUpdates) {  // HOMY
+            UpdatesSheet()
         }
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
@@ -485,6 +497,26 @@ struct BrowserView: View {
             }
         }.background(Color(nsColor: .windowBackgroundColor))
     }
+    // HOMY: toolbar bell for pending updates; the badge counts the repos.
+    @ViewBuilder private var updatesBadgeButton: some View {
+        if !updates.offers.isEmpty {
+            Button {
+                showUpdates = true
+            } label: {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .overlay(alignment: .topTrailing) {
+                        Text("\(updates.offers.count)")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(2).frame(minWidth: 12)
+                            .background(Capsule().fill(Color.red))
+                            .foregroundStyle(Color.white)
+                            .offset(x: 6, y: -6)
+                    }
+            }.help("Updates available")
+        }
+    }
+
     private var statusBar: some View {
         HStack {
             if model.loading || model.searching || model.sorting || model.busy {

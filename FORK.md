@@ -56,6 +56,8 @@ two-line fix; everything else merges untouched.
 | Duplicates (identical SHA-256 + look-alike photos) | `Duplicates.swift` | ⇧⌘D |
 | Clean Up (old installers, downloads, screenshots, big videos) | `Cleanup.swift` | ⇧⌘K |
 | Quick Search from any app, Spotlight-style | `QuickSearch.swift` | ⇧⌘Space (global) |
+| **Describe Contents** — semantic search inside files via [DigUp](https://github.com/ARahim3/DigUp) | `DigUpBridge.swift`, `DigUpSemantic.swift` | ⇧⌘F, sidebar |
+| **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Homy menu, toolbar bell |
 | Menu-bar list of latest downloads | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
 | Shortcuts actions (Find Files, Get Latest Download, Search in Homy) | `HomyIntents.swift` | Shortcuts.app |
@@ -67,6 +69,53 @@ never leave your machine.
 Not carried over from Homy: paid licensing/activation (this fork is free,
 MIT), Sparkle-style auto-updates (rebuild with `./scripts/build.sh`), and
 the macOS 26-only multi-file drag stack (the system provides it).
+
+## DigUp integration (Describe Contents)
+
+[DigUp](https://github.com/ARahim3/DigUp) adds search by what is inside
+files — photo scenes, PDF and document text, what is said in recordings —
+with EmbeddingGemma 2 running fully on-device. The sidebar's **Describe
+Contents** row (⇧⌘F) hosts it.
+
+The integration talks only to DigUp's documented CLI surfaces, so DigUp
+releases keep working without changes here:
+
+- `digup search-service` (JSON lines) — live search with a warm encoder,
+  from `DigUpBridge.swift`.
+- `digup index-service` (JSON lines) — the Sync Now button's indexer, with
+  per-file progress.
+- `digup download-model` (JSON lines) — only offered when the model folder
+  has no weights; the command itself skips files already present.
+
+Reuse rules (what you asked for):
+
+- If DigUp.app is installed, its CLI is used in place
+  (`DigUp.app/Contents/Helpers/digup`, or `digup` on PATH, or `DIGUP_CLI`).
+- The model (`~/Library/Application Support/DigUp/Models`) is never
+  re-downloaded, and the index (`~/Library/Application Support/DigUp/
+  index.noindex`) is never rebuilt — the same files DigUp.app owns.
+- The folder list merges DigUp's own choices (its defaults domain
+  `com.abdurrahim.DigUp`, key `roots`) with folders added in the fork's
+  Manage Folders sheet.
+
+## Update Center
+
+The fork checks GitHub every six hours (and on launch) for:
+
+- **zeusinsight/FinderSearch** releases — a toolbar bell shows the count;
+  **Install** merges upstream `main` into `homy` via
+  `scripts/sync-upstream.sh` and rebuilds with `scripts/build.sh`. Your
+  features live in fork-only files with `// HOMY:`-marked integration
+  points, so the merge keeps them; a **Relaunch** button finishes the job.
+  `scripts/build.sh` writes the checkout path into the app bundle
+  (`Contents/Resources/repo-root`) so the rebuild can find the repo.
+- **ARahim3/DigUp** releases (only when DigUp is installed) — **Install**
+  upgrades the brew cask when brew manages it, otherwise downloads the
+  release DMG into /Applications. Model and index are untouched by both.
+
+Alerts appear as the toolbar badge, a Homy-menu item, and (when the app is
+in the background) a system notification. Manual check: Homy → Check for
+Updates…
 
 ## Build
 

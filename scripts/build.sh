@@ -27,6 +27,8 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/Resources"
 cp "$swift_bin/FinderSearch" "$app/Contents/MacOS/"
 cp vendor/fsearch/target/release/fsearch "$app/Contents/Helpers/"
 cp vendor/fsearch/LICENSE "$app/Contents/Resources/fsearch-LICENSE"
+# HOMY: the update center rebuilds from this checkout when upstream ships a release.
+printf '%s\n' "$PWD" > "$app/Contents/Resources/repo-root"
 if [[ -f LICENSE ]]; then
     cp LICENSE "$app/Contents/Resources/FinderSearch-LICENSE"
 fi
