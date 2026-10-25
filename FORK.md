@@ -42,15 +42,15 @@ two-line fix; everything else merges untouched.
 |---|---|---|
 | Home dashboard with category totals and recent shelves | `HomeDashboard.swift` | sidebar → Home |
 | Shelves: Images, Videos, Music, Documents, Archives, Apps | `HomeDashboard.swift`, routes `cat:…` | sidebar |
-| Smart Folders (Large Files, Screenshots) | `SmartFolders.swift`, routes `smart:…` | sidebar |
+| Smart Folders (Large Files, Screenshots) | `HomyCore.swift`, routes `smart:…` | sidebar |
 | Pinned folders | upstream Favorites (unchanged) | sidebar |
 | Grid/list views, sorting, resizable cards | upstream views | ⌘1–⌘4 |
 | Quick Look previews | upstream | Space |
 | Built-in music player | `MusicPlayer.swift` | ⌃⌘P, ⌘←/⌘→ |
-| Inspector (dimensions, duration, camera, download source) | `HomyInspector.swift` | ⌥⌘I |
+| Inspector (dimensions, duration, camera, download source) | `HomyPanels.swift` | ⌥⌘I |
 | Natural-language search with editable filter chips | `NaturalLanguage.swift` | ⌘F |
 | Search text inside files | fsearch `grep:` filter | add `grep:` or toggle in chips |
-| Saved searches pinned to the sidebar | `SavedSearches.swift` | ⌘S while searching |
+| Saved searches pinned to the sidebar | `NaturalLanguage.swift` | ⌘S while searching |
 | Text in images (OCR) | `TextRecognition.swift` (Vision) | ⇧⌘C |
 | Downloaded From — downloads grouped by source | `WhereFroms.swift` | ⇧⌘J |
 | Duplicates (identical SHA-256 + look-alike photos) | `Duplicates.swift` | ⇧⌘D |
