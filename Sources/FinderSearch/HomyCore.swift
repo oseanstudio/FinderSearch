@@ -204,16 +204,23 @@ extension Hit {
 
 // MARK: - Sidebar sections
 
-/// Home, Categories, Smart Folders and Saved Searches, inserted above
-/// upstream's Recents row.
-struct HomySidebarSections: View {
+/// Home and Describe Contents stay pinned at the top; the browse sections
+/// below can sit above or below Favorites (Homy menu → "Favorites Above
+/// Categories").
+struct HomyPinnedSections: View {
     let select: (String) -> Void
-    @ObservedObject private var saved = SavedSearches.shared
-    @ObservedObject private var theme = HomyTheme.shared
 
     var body: some View {
-    Label("Home", systemImage: "house.fill").tag("home")
+        Label("Home", systemImage: "house.fill").tag("home")
         Label("Describe Contents", systemImage: "text.magnifyingglass").tag("semantic")  // DIGUP
+    }
+}
+
+struct HomyBrowseSections: View {
+    let select: (String) -> Void
+    @ObservedObject private var saved = SavedSearches.shared
+
+    var body: some View {
         Section("Categories") {
             ForEach(HomyCategory.allCases) { category in
                 Label(category.title, systemImage: category.symbol)
@@ -247,6 +254,11 @@ struct HomySidebarSections: View {
             }
         }
     }
+}
+
+extension Notification.Name {
+    /// Favorites/Categories ordering flipped; BrowserView re-renders the sidebar.
+    static let homySidebarOrderChanged = Notification.Name("homy.sidebarOrderChanged")
 }
 
 // MARK: - Special content routing

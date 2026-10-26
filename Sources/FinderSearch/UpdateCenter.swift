@@ -302,18 +302,27 @@ struct UpdateOffer: Identifiable {
     /// DigUp update: brew when it manages the install, otherwise the release
     /// DMG. Neither touches the model or the index.
     private func installDigUp(_ offer: UpdateOffer) async {
+        // Kept on failure so the log can point at a manual-install DMG.
+        var keptDownload: URL?
         do {
+            appendLog("Updating DigUp to \(offer.release.version)…")
             if let brew = await Self.which("brew") {
+                appendLog("Homebrew found at \(brew.path)")
                 let listed = try? await runCapture(brew.path, ["list", "--cask", "digup"])
                 if (listed?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) == false {
                     installStage = "Upgrading the DigUp cask…"
+                    appendLog("brew manages the cask; running upgrade…")
                     try await runScript(
                         brew.path, ["upgrade", "--cask", "digup"], cwd: nil,
                         onLine: { [weak self] in self?.appendLog($0) })
-                    installStage = "Updated."
+                    installStage = "Updated via Homebrew. The model and index were kept."
                     offers.removeAll { $0.kind == .digUp }
+                    DigUpService.shared.shutdown()
                     return
                 }
+                appendLog("brew does not manage DigUp; installing from the release DMG.")
+            } else {
+                appendLog("Homebrew not found; installing from the release DMG.")
             }
             guard
                 let asset = offer.release.assets.first(where: {
@@ -323,30 +332,34 @@ struct UpdateOffer: Identifiable {
                 throw DigUpError("The release has no DMG; install it manually from GitHub.")
             }
             installStage = "Closing DigUp if it is running…"
-            let quit = Process()
-            quit.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            quit.arguments = ["-e", "tell application \"DigUp\" to quit saving no"]
-            try? quit.run()
-            quit.waitUntilExit()
+            await quitDigUp()
 
             let temporary = FileManager.default.temporaryDirectory
                 .appendingPathComponent("digup-update-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+            keptDownload = temporary
             installStage = "Downloading \(asset.name)…"
             let dmg = temporary.appendingPathComponent(asset.name)
+            appendLog("downloading \(asset.browserDownloadURL.absoluteString)")
+            var downloadedBytes: Int64 = 0
             try await GitHubReleases.download(
                 url: asset.browserDownloadURL, to: dmg,
-                progress: { [weak self] fraction, _, _ in
-                    Task { @MainActor in self?.installFraction = fraction }
+                progress: { [weak self] fraction, bytes, _ in
+                    Task { @MainActor in
+                        self?.installFraction = fraction
+                        downloadedBytes = bytes
+                    }
                 })
+            appendLog("downloaded \(GitHubReleases.format(downloadedBytes))")
             installStage = "Mounting…"
             let mount = temporary.appendingPathComponent("mount", isDirectory: true)
             try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
             try await runScript(
                 "/usr/bin/hdiutil",
                 ["attach", dmg.path, "-nobrowse", "-readonly", "-quiet", "-mountpoint", mount.path],
-                cwd: nil)
-            installStage = "Installing to /Applications…"
+                cwd: nil,
+                onLine: { [weak self] in self?.appendLog($0) })
+            installStage = "Installing…"
             guard
                 let bundle = (try? FileManager.default.contentsOfDirectory(
                     at: mount, includingPropertiesForKeys: nil))?.first(where: {
@@ -355,21 +368,87 @@ struct UpdateOffer: Identifiable {
             else {
                 throw DigUpError("DigUp.app was not inside the disk image.")
             }
-            let destination = URL(fileURLWithPath: "/Applications/DigUp.app")
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
+            // /Applications needs group-admin rights; the user folder always works.
+            var destination = URL(fileURLWithPath: "/Applications/DigUp.app")
+            do {
+                try installAppBundle(bundle, to: destination)
+            } catch {
+                appendLog("/Applications failed: \(error.localizedDescription)")
+                installStage = "Installing to your Applications folder…"
+                let homeApplications = URL(
+                    fileURLWithPath: NSHomeDirectory() + "/Applications", isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: homeApplications, withIntermediateDirectories: true)
+                destination = homeApplications.appendingPathComponent("DigUp.app")
+                try installAppBundle(bundle, to: destination)
             }
-            try FileManager.default.copyItem(at: bundle, to: destination)
+            appendLog("installed at \(destination.path)")
             try? await runScript(
-                "/usr/bin/hdiutil", ["detach", mount.path, "-quiet"], cwd: nil)
+                "/usr/bin/hdiutil", ["detach", mount.path, "-quiet"], cwd: nil,
+                onLine: { [weak self] in self?.appendLog($0) })
             try? FileManager.default.removeItem(at: temporary)
-            installStage = "Updated. The model and index were kept."
-            offers.removeAll { $0.kind == .digUp }
+            keptDownload = nil
+            finishDigUpInstall("Updated. The model and index were kept.")
         } catch {
             installFailed = true
             installStage = error.localizedDescription
+            appendLog("failed: \(error.localizedDescription)")
+            if let keptDownload {
+                appendLog("The downloaded disk image is still at \(keptDownload.path) — "
+                    + "you can install it by double-clicking.")
+            }
         }
         installKind = nil
+    }
+
+    private func installAppBundle(_ bundle: URL, to destination: URL) throws {
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: bundle, to: destination)
+    }
+
+    /// Drop the offer and forget the old helper process (it respawns from the
+    /// new binary on the next search).
+    private func finishDigUpInstall(_ message: String) {
+        installStage = message
+        offers.removeAll { $0.kind == .digUp }
+        DigUpService.shared.shutdown()
+    }
+
+    /// Quits DigUp without launching it (a bare `tell … to quit` starts it),
+    /// then makes sure it is really gone before its bundle is replaced.
+    private func quitDigUp() async {
+        appendLog("closing DigUp if it is running…")
+        let script =
+            "if application \"DigUp\" is running then\ntell application \"DigUp\" to quit saving no\nend if"
+        try? await runScript("/usr/bin/osascript", ["-e", script], cwd: nil)
+        for _ in 0..<15 {
+            if !Self.digUpRunning() { return }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if Self.digUpRunning() {
+            appendLog("DigUp stayed up; asking it to stop.")
+            try? await runScript("/usr/bin/pkill", ["-x", "DigUp"], cwd: nil)
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
+    private nonisolated static func digUpRunning() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-x", "DigUp"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return process.terminationStatus == 0 && !data.isEmpty
+        } catch {
+            return false
+        }
     }
 
     func relaunchFork() {
@@ -486,6 +565,15 @@ struct UpdatesSheet: View {
                 if center.checking { ProgressView().controlSize(.small) }
                 Button("Check Now") { Task { await center.checkNow() } }
                     .disabled(center.checking || center.installKind != nil)
+                Button {  // HOMY: sheets on macOS ship no close control of their own
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                .help("Close")
             }.padding(14)
             Divider()
             ScrollView {
@@ -493,6 +581,7 @@ struct UpdatesSheet: View {
                     if let error = center.lastError {
                         Text("GitHub check failed: \(error)")
                             .font(.caption).foregroundStyle(.orange)
+                            .textSelection(.enabled)
                     }
                     if center.offers.isEmpty && !center.checking {
                         ContentUnavailableView(
@@ -512,20 +601,32 @@ struct UpdatesSheet: View {
                                 Text(center.installStage)
                                     .font(.callout)
                                     .foregroundStyle(center.installFailed ? .orange : .primary)
+                                    .textSelection(.enabled)
                             }
                             if let fraction = center.installFraction {
                                 ProgressView(value: fraction)
                             }
                             if !center.installLog.isEmpty {
-                                Text(center.installLog)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(12)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(8)
-                                    .background(Color(nsColor: .textBackgroundColor))
-                                    .cornerRadius(6)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ScrollView {
+                                        Text(center.installLog)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }.frame(maxHeight: 160)
+                                    HStack {
+                                        Spacer()
+                                        Button("Copy Log") {
+                                            NSPasteboard.general.clearContents()
+                                            NSPasteboard.general.setString(
+                                                center.installLog, forType: .string)
+                                        }.controlSize(.small)
+                                    }
+                                }
+                                .padding(8)
+                                .background(Color(nsColor: .textBackgroundColor))
+                                .cornerRadius(6)
                             }
                             if center.relaunchReady {
                                 Button("Relaunch Now") { center.relaunchFork() }

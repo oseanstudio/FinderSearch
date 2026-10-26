@@ -131,6 +131,9 @@ struct BrowserView: View {
     @ObservedObject var model: SearchModel
     @ObservedObject private var updates = UpdateCenter.shared  // HOMY
     @State private var showUpdates = false  // HOMY
+    // HOMY: sidebar order; a plain @State so the EquatableView on the sidebar
+    // sees the change (UserDefaults alone would not re-render it).
+    @State private var favoritesFirst = UserDefaults.standard.bool(forKey: "homy.favoritesFirst")
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
@@ -146,7 +149,8 @@ struct BrowserView: View {
                 state: SidebarState(
                     route: model.route, favorites: workspace.favorites,
                     volumes: workspace.volumes, ejectingVolumes: workspace.ejectingVolumes,
-                    showDiskAccessHint: model.ready && !model.fullDiskAccess),
+                    showDiskAccessHint: model.ready && !model.fullDiskAccess,
+                    favoritesFirst: favoritesFirst),  // HOMY
                 select: { route in
                     fileNavigationActive = false; model.sidebar(route)
                 },
@@ -274,6 +278,9 @@ struct BrowserView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .homyShowUpdates)) { _ in  // HOMY
             showUpdates = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homySidebarOrderChanged)) { _ in  // HOMY
+            favoritesFirst = UserDefaults.standard.bool(forKey: "homy.favoritesFirst")
         }
         .sheet(isPresented: $showUpdates) {  // HOMY
             UpdatesSheet()

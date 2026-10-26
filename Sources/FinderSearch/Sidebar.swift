@@ -63,10 +63,12 @@ struct SidebarState: Equatable {
     let volumes: [MountedVolume]
     let ejectingVolumes: Set<String>
     let showDiskAccessHint: Bool
+    // HOMY: Favorites above or below the fork's Categories block.
+    let favoritesFirst: Bool
 
     init(
         route: String, favorites: [String], volumes: [MountedVolume], ejectingVolumes: Set<String>,
-        showDiskAccessHint: Bool
+        showDiskAccessHint: Bool, favoritesFirst: Bool = false
     ) {
         let home = NSHomeDirectory()
         let fixedRoutes =
@@ -83,6 +85,7 @@ struct SidebarState: Equatable {
         self.volumes = volumes
         self.ejectingVolumes = ejectingVolumes
         self.showDiskAccessHint = showDiskAccessHint
+        self.favoritesFirst = favoritesFirst
     }
 }
 
@@ -132,27 +135,15 @@ struct BrowserSidebar: View, Equatable {
                 set: { if let route = $0 { select(route) } }
             )
         ) {
-            HomySidebarSections(select: select)  // HOMY
-            Label("Recents", systemImage: "clock").tag("recents")
-            Section("Favorites") {
-                ForEach(state.favorites, id: \.self) { path in
-                    let label = FavoriteFolders.label(for: path)
-                    row(label.name, label.symbol, path)
-                        .contextMenu {
-                            folderActions(path)
-                            Divider()
-                            Button("Remove from Sidebar") { removeFavorite(path) }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            FavoriteDragTarget(path: path) { source, target in
-                                guard let from = state.favorites.firstIndex(of: source),
-                                    let to = state.favorites.firstIndex(of: target)
-                                else { return }
-                                moveFavorites(IndexSet(integer: from), to > from ? to + 1 : to)
-                            }
-                        }
-                }
+            HomyPinnedSections(select: select)  // HOMY
+            if state.favoritesFirst {  // HOMY: order is a user choice
+                recentsRow
+                favoritesSection
+                HomyBrowseSections(select: select)
+            } else {
+                HomyBrowseSections(select: select)
+                recentsRow
+                favoritesSection
             }
             Section("Locations") {
                 row(
@@ -228,6 +219,35 @@ struct BrowserSidebar: View, Equatable {
         Button("Open in New Tab") { openInNewTab(URL(fileURLWithPath: path, isDirectory: true)) }
         Button("Reveal in Finder") {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
+    }
+
+    // HOMY: extracted so the Favorites block can sit above or below the
+    // fork's Categories section.
+    private var recentsRow: some View {
+        Label("Recents", systemImage: "clock").tag("recents")
+    }
+
+    @ViewBuilder private var favoritesSection: some View {
+        Section("Favorites") {
+            ForEach(state.favorites, id: \.self) { path in
+                let label = FavoriteFolders.label(for: path)
+                row(label.name, label.symbol, path)
+                    .contextMenu {
+                        folderActions(path)
+                        Divider()
+                        Button("Remove from Sidebar") { removeFavorite(path) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background {
+                        FavoriteDragTarget(path: path) { source, target in
+                            guard let from = state.favorites.firstIndex(of: source),
+                                let to = state.favorites.firstIndex(of: target)
+                            else { return }
+                            moveFavorites(IndexSet(integer: from), to > from ? to + 1 : to)
+                        }
+                    }
+            }
         }
     }
 
