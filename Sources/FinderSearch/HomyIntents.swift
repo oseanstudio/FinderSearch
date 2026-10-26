@@ -51,9 +51,9 @@ struct HomyGetLatestDownloadIntent: AppIntent {
 }
 
 struct HomySearchInAppIntent: AppIntent {
-    static var title: LocalizedStringResource = "Search in Homy Fork"
+    static var title: LocalizedStringResource = "Search in Hearth"
     static var description = IntentDescription(
-        "Open the browser window with the given search.")
+        "Open the Hearth browser window with the given search.")
 
     @Parameter(title: "Search Query")
     var query: String

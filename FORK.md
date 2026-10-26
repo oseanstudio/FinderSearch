@@ -1,8 +1,11 @@
-# FinderSearch — homy fork
+# Hearth — a FinderSearch fork
 
-This is a fork of [zeusinsight/FinderSearch](https://github.com/zeusinsight/FinderSearch)
-that carries every feature of [Homy](https://tryhomy.app/) on top of the
-original app, while staying trivially mergeable with upstream.
+Hearth is this fork's identity: a home for your files with search built
+in. It is a fork of [zeusinsight/FinderSearch](https://github.com/zeusinsight/FinderSearch)
+carrying every feature of [Homy](https://tryhomy.app/) on top of the
+original app, while staying trivially mergeable with upstream. The app
+ships as `dist/Hearth.app`; internal module and engine names keep their
+upstream `FinderSearch` spelling so merges stay small.
 
 ## Getting upstream updates
 
@@ -124,9 +127,9 @@ Updates…
 ## Build
 
 ```bash
-./scripts/build.sh && open dist/FinderSearch.app
+./scripts/build.sh && open dist/Hearth.app
 ```
 
 The global ⇧⌘Space Quick Search hotkey needs the app running once from
-`dist/FinderSearch.app` (Launch Services registration). Full Disk Access
+`dist/Hearth.app` (Launch Services registration). Full Disk Access
 is recommended, as with upstream.

@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
             }
         }
         .defaultSize(width: 1050, height: 680).windowToolbarStyle(.unified)
-        MenuBarExtra("FinderSearch", systemImage: "arrow.down.circle") {  // HOMY
+        MenuBarExtra("Hearth", systemImage: "arrow.down.circle") {  // HOMY
             MenuBarDownloadsView()
         }
         // Window style: the menu needs a live text field for its search bar.
@@ -106,7 +106,7 @@ import UniformTypeIdentifiers
                     NotificationCenter.default.post(name: .focusSearch, object: nil)
                 }.keyboardShortcut("f")
             }
-            CommandMenu("Homy") {  // HOMY
+            CommandMenu("Hearth") {  // HOMY
                 HomyCommandMenu(model: model)
             }
         }

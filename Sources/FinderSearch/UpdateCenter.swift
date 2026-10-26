@@ -453,7 +453,7 @@ struct UpdateOffer: Identifiable {
 
     func relaunchFork() {
         guard let repo = Self.repoRoot else { return }
-        let app = repo.appendingPathComponent("dist/FinderSearch.app")
+        let app = repo.appendingPathComponent("dist/Hearth.app")
         NSWorkspace.shared.open(app)
         NSApp.terminate(nil)
     }

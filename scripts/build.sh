@@ -21,10 +21,11 @@ fi
 cargo build --release --locked --manifest-path vendor/fsearch/Cargo.toml --target-dir vendor/fsearch/target
 swift build -c release
 swift_bin="$(swift build -c release --show-bin-path)"
-app="$PWD/dist/FinderSearch.app"
+# HOMY: the fork ships as Hearth.
+app="$PWD/dist/Hearth.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/Resources"
 ./scripts/build-icon.sh "$app/Contents/Resources/AppIcon.icns"
-cp "$swift_bin/FinderSearch" "$app/Contents/MacOS/"
+cp "$swift_bin/FinderSearch" "$app/Contents/MacOS/Hearth"
 cp vendor/fsearch/target/release/fsearch "$app/Contents/Helpers/"
 cp vendor/fsearch/LICENSE "$app/Contents/Resources/fsearch-LICENSE"
 # HOMY: the update center rebuilds from this checkout when upstream ships a release.
@@ -36,9 +37,10 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>FinderSearch</string>
+<key>CFBundleExecutable</key><string>Hearth</string>
 <key>CFBundleIdentifier</key><string>local.findersearch.app</string>
-<key>CFBundleName</key><string>FinderSearch</string>
+<key>CFBundleName</key><string>Hearth</string>
+<key>CFBundleDisplayName</key><string>Hearth</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.4.9</string>
