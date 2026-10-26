@@ -150,9 +150,10 @@ struct SidebarLayout: Codable, Equatable {
     }
 }
 
-/// HOMY: Finder-style drag for section titles. A gesture on each title lifts
-/// a floating preview that follows the cursor, shows an insertion line at
-/// the nearest boundary, and reorders on release.
+/// HOMY: Finder-style drag for section titles. An AppKit event catcher under
+/// each title consumes the mouse events before the List's selection machinery
+/// can react, so dragging never changes the active location. Coordinates live
+/// in the reference box's space (anchored to the whole sidebar, y-up).
 @MainActor final class SidebarDragCoordinator: ObservableObject {
     static let shared = SidebarDragCoordinator()
 
@@ -170,24 +171,24 @@ struct SidebarLayout: Codable, Equatable {
         if frames[section] != frame { frames[section] = frame }
     }
 
-    func changed(_ section: SidebarSection, _ value: DragGesture.Value) {
+    func dragged(to point: CGPoint, section: SidebarSection) {
         if session == nil {
             guard let frame = frames[section] else { return }
-            let start = value.startLocation
             session = Session(
                 section: section,
-                grabOffset: CGPoint(x: start.x - frame.minX, y: start.y - frame.minY),
-                location: value.location, slot: 0)
+                grabOffset: CGPoint(x: point.x - frame.minX, y: point.y - frame.minY),
+                location: point, slot: 0)
         }
-        session?.location = value.location
-        session?.slot = slot(at: value.location, dragged: section)
+        session?.location = point
+        session?.slot = slot(at: point, dragged: section)
     }
 
-    /// How many of the other visible section titles sit above the point.
+    /// How many of the other visible section titles sit above the point
+    /// (larger y in the reference space means higher on screen).
     private func slot(at point: CGPoint, dragged: SidebarSection) -> Int {
         let others = SidebarLayout.load().visibleSections.filter { $0 != dragged }
         return others.filter { section in
-            (frames[section]?.midY ?? .infinity) < point.y
+            (frames[section]?.midY ?? -.greatestFiniteMagnitude) > point.y
         }.count
     }
 
@@ -201,6 +202,95 @@ struct SidebarLayout: Codable, Equatable {
         // the end; their position is invisible until restored.
         layout.sections = ordered + layout.sections.filter { !ordered.contains($0) }
         layout.save()
+    }
+}
+
+/// HOMY: an invisible view anchoring the sidebar-wide coordinate space that
+/// drag events and header frames share.
+final class SidebarReferenceBox: NSView {
+    static weak var current: SidebarReferenceBox?
+}
+
+struct SidebarSpaceAnchor: NSViewRepresentable {
+    func makeNSView(context: Context) -> SidebarReferenceBox {
+        let view = SidebarReferenceBox()
+        SidebarReferenceBox.current = view
+        return view
+    }
+
+    func updateNSView(_ view: SidebarReferenceBox, context: Context) {}
+}
+
+/// HOMY: consumes the header's mouse events so the List never turns a drag
+/// into a selection change; reports its frame and drives the coordinator.
+final class SidebarDragCatcher: NSView {
+    var section: SidebarSection
+    private var pressing = false
+    private var dragging = false
+    private var startScreen = NSPoint.zero
+
+    init(section: SidebarSection) {
+        self.section = section
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    private func reportFrame() {
+        guard let reference = SidebarReferenceBox.current else { return }
+        SidebarDragCoordinator.shared.reportFrame(section, convert(bounds, to: reference))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        reportFrame()
+    }
+
+    override func layout() {
+        super.layout()
+        reportFrame()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressing = true
+        dragging = false
+        startScreen = NSEvent.mouseLocation
+        reportFrame()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard pressing else { return }
+        let screen = NSEvent.mouseLocation
+        if !dragging {
+            guard hypot(screen.x - startScreen.x, screen.y - startScreen.y) > 3 else { return }
+            dragging = true
+        }
+        guard
+            let reference = SidebarReferenceBox.current,
+            window != nil
+        else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let referencePoint = convert(point, to: reference)
+        SidebarDragCoordinator.shared.dragged(to: referencePoint, section: section)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if dragging { SidebarDragCoordinator.shared.ended() }
+        pressing = false
+        dragging = false
+    }
+}
+
+struct SidebarDragHandle: NSViewRepresentable {
+    let section: SidebarSection
+
+    func makeNSView(context: Context) -> SidebarDragCatcher {
+        SidebarDragCatcher(section: section)
+    }
+
+    func updateNSView(_ view: SidebarDragCatcher, context: Context) {
+        view.section = section
     }
 }
 
@@ -220,21 +310,9 @@ struct SidebarSectionHeader: View {
                 .font(.system(size: 7)).foregroundStyle(.tertiary)
         }
         .opacity(isDragged ? 0.35 : 1)
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { drag.reportFrame(section, geo.frame(in: .named("SidebarList"))) }
-                    .onChange(of: geo.frame(in: .named("SidebarList"))) { _, frame in
-                        drag.reportFrame(section, frame)
-                    }
-            }
-        )
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 4, coordinateSpace: .named("SidebarList"))
-                .onChanged { drag.changed(section, $0) }
-                .onEnded { _ in drag.ended() }
-        )
+        // HOMY: the catcher consumes mouse events before the List's selection
+        // machinery can react; right-clicks still reach the context menu.
+        .background(SidebarDragHandle(section: section))
         .contextMenu { headerMenu }
         .help("Drag to reorder · right-click for options")
     }
@@ -251,85 +329,6 @@ struct SidebarSectionHeader: View {
     }
 }
 
-/// HOMY: standard context menu for hideable built-in sidebar rows.
-struct SidebarRowMenu: View {
-    let itemID: String
-    @ViewBuilder var body: some View {
-        Button("Remove from Sidebar") {
-            var layout = SidebarLayout.load()
-            layout.setHidden(itemID, true)
-            layout.save()
-        }
-        Button("Customize Sidebar…") {
-            NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
-        }
-    }
-}
-
-/// HOMY: the floating drag preview and insertion line, drawn over the list.
-struct SidebarDragOverlay: View {
-    @ObservedObject private var drag = SidebarDragCoordinator.shared
-
-    var body: some View {
-        Group {
-            if let session = drag.session {
-                insertionLine(session)
-                liftPreview(session)
-            }
-        }.allowsHitTesting(false)
-    }
-
-    /// Accent line at the boundary the section would land at.
-    @ViewBuilder private func insertionLine(_ session: SidebarDragCoordinator.Session) -> some View {
-        let layout = SidebarLayout.load()
-        let others = layout.visibleSections.filter { $0 != session.section }
-        let ordered = others.compactMap { drag.frames[$0] }.sorted { $0.minY < $1.minY }
-        let line: CGRect? = {
-            guard !ordered.isEmpty else { return nil }
-            if session.slot < ordered.count {
-                let frame = ordered[session.slot]
-                return CGRect(
-                    x: frame.minX, y: frame.minY - 3, width: frame.width + 60, height: 3)
-            }
-            let frame = ordered[ordered.count - 1]
-            return CGRect(
-                x: frame.minX, y: frame.maxY + 2, width: frame.width + 60, height: 3)
-        }()
-        if let line {
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color.accentColor)
-                .frame(width: line.width, height: line.height)
-                .position(x: line.midX, y: line.midY)
-                .shadow(radius: 1)
-        }
-    }
-
-    /// The lifted title following the cursor.
-    @ViewBuilder private func liftPreview(_ session: SidebarDragCoordinator.Session) -> some View {
-        if let frame = drag.frames[session.section] {
-            HStack(spacing: 4) {
-                Text(session.section.title)
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 7)).foregroundStyle(.tertiary)
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .frame(width: max(90, min(frame.width + 24, 190)), alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.25), radius: 6, y: 2))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
-            .position(
-                x: session.location.x - session.grabOffset.x + frame.width / 2,
-                y: session.location.y - session.grabOffset.y + frame.height / 2)
-        }
-    }
-}
-
-/// Folder results and loading phases have no bearing on sidebar content.
 struct SidebarState: Equatable {
     let selection: String?
     let favorites: [String]
@@ -375,6 +374,8 @@ struct BrowserSidebar: View, Equatable {
     let openInNewTab: (URL) -> Void
     let addFavoriteFolders: ([URL]) async -> Bool
     @State private var folderDropTargeted = false
+    @State private var draggingSelection = false  // HOMY: mouse is mid-drag
+    @State private var dragGuardMonitors: [Any] = []
     let eject: (MountedVolume) -> Void
     private let home = NSHomeDirectory()
 
@@ -403,6 +404,34 @@ struct BrowserSidebar: View, Equatable {
             }
         }
         .navigationSplitViewColumnWidth(min: 170, ideal: 208, max: 280)
+        .onAppear { installDragGuard() }  // HOMY
+        .onDisappear { dragGuardMonitors.forEach { NSEvent.removeMonitor($0) } }
+    }
+
+    /// HOMY: a press-drag over sidebar rows must not walk the selection (and
+    /// navigate) underneath the user; only genuine clicks navigate.
+    private func installDragGuard() {
+        guard dragGuardMonitors.isEmpty else { return }
+        dragGuardMonitors = [
+            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { event in
+                Task { @MainActor in draggingSelection = true }
+                return event
+            },
+            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+                Task { @MainActor in draggingSelection = false }
+                return event
+            },
+            NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+                Task { @MainActor in
+                    draggingSelection = false
+                    // Nudge a re-render so the List's transient drag selection
+                    // snaps back to the real one.
+                    folderDropTargeted.toggle()
+                    folderDropTargeted.toggle()
+                }
+                return event
+            },
+        ]
     }
 
     private var locations: some View {
@@ -410,7 +439,9 @@ struct BrowserSidebar: View, Equatable {
             List(
                 selection: Binding<String?>(
                     get: { state.selection },
-                    set: { if let route = $0 { select(route) } }
+                    // HOMY: drags must not walk the selection (and navigate);
+                    // only genuine clicks change the active location.
+                    set: { if let route = $0, !draggingSelection { select(route) } }
                 )
             ) {
                 HomyPinnedSections(select: select, layout: state.layout)  // HOMY
@@ -426,7 +457,7 @@ struct BrowserSidebar: View, Equatable {
             SidebarDragOverlay()  // HOMY
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .coordinateSpace(name: "SidebarList")
+        .background(SidebarSpaceAnchor())  // HOMY: shared drag coordinate space
         // Recreate the native list after a reorder so selection follows the path,
         // rather than the previous row index retained by AppKit.
         .id(state.favorites)
@@ -577,6 +608,105 @@ struct BrowserSidebar: View, Equatable {
     }
 }
 
+
+/// HOMY: restore anything removed from the sidebar, Finder-style.
+/// HOMY: standard context menu for hideable built-in sidebar rows.
+struct SidebarRowMenu: View {
+    let itemID: String
+    @ViewBuilder var body: some View {
+        Button("Remove from Sidebar") {
+            var layout = SidebarLayout.load()
+            layout.setHidden(itemID, true)
+            layout.save()
+        }
+        Button("Customize Sidebar…") {
+            NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
+        }
+    }
+}
+
+/// HOMY: the floating drag preview and insertion line, drawn over the list.
+/// Coordinates arrive in the reference box's space (y-up) and are converted
+/// to SwiftUI's local space (y-down) for drawing.
+struct SidebarDragOverlay: View {
+    @ObservedObject private var drag = SidebarDragCoordinator.shared
+
+    var body: some View {
+        GeometryReader { geo in
+            let height = geo.size.height
+            Group {
+                if let session = drag.session {
+                    insertionLine(session, height: height)
+                    liftPreview(session, height: height)
+                }
+            }
+        }.allowsHitTesting(false)
+    }
+
+    private func local(_ rect: CGRect, height: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    private func local(_ point: CGPoint, height: CGFloat) -> CGPoint {
+        CGPoint(x: point.x, y: height - point.y)
+    }
+
+    /// Accent line at the boundary the section would land at.
+    @ViewBuilder private func insertionLine(
+        _ session: SidebarDragCoordinator.Session, height: CGFloat
+    ) -> some View {
+        let layout = SidebarLayout.load()
+        let others = layout.visibleSections.filter { $0 != session.section }
+        // In reference space (y-up), visual top-to-bottom is descending midY.
+        let ordered = others.compactMap { drag.frames[$0] }.sorted { $0.midY > $1.midY }
+        let line: CGRect? = {
+            guard !ordered.isEmpty else { return nil }
+            if session.slot < ordered.count {
+                let frame = ordered[session.slot]
+                return CGRect(
+                    x: frame.minX, y: frame.maxY - 1.5, width: frame.width + 60, height: 3)
+            }
+            let frame = ordered[ordered.count - 1]
+            return CGRect(
+                x: frame.minX, y: frame.minY - 1.5, width: frame.width + 60, height: 3)
+        }()
+        if let line {
+            let localRect = local(line, height: height)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color.accentColor)
+                .frame(width: localRect.width, height: localRect.height)
+                .position(x: localRect.midX, y: localRect.midY)
+                .shadow(radius: 1)
+        }
+    }
+
+    /// The lifted title following the cursor.
+    @ViewBuilder private func liftPreview(
+        _ session: SidebarDragCoordinator.Session, height: CGFloat
+    ) -> some View {
+        if let frame = drag.frames[session.section] {
+            let center = CGPoint(
+                x: session.location.x - session.grabOffset.x + frame.width / 2,
+                y: session.location.y - session.grabOffset.y + frame.height / 2)
+            let localCenter = local(center, height: height)
+            HStack(spacing: 4) {
+                Text(session.section.title)
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 7)).foregroundStyle(.tertiary)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .frame(width: max(90, min(frame.width + 24, 190)), alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.25), radius: 6, y: 2))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
+            .position(x: localCenter.x, y: localCenter.y)
+        }
+    }
+}
 
 /// HOMY: restore anything removed from the sidebar, Finder-style.
 struct CustomizeSidebarSheet: View {
