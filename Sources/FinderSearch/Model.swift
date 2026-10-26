@@ -317,6 +317,22 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         }
         selectionNavigation.send((target, extending))
     }
+    // HOMY: type-select — jump to the next item whose name starts with the
+    // typed prefix, wrapping around the list.
+    func selectTypeAhead(_ prefix: String) {
+        let items = sortedHits
+        guard !items.isEmpty, !prefix.isEmpty else { return }
+        let lowered = prefix.lowercased()
+        let start =
+            focusedPath.flatMap { focus in items.firstIndex { $0.path == focus } } ?? -1
+        for step in 1...items.count {
+            let hit = items[(start + step) % items.count]
+            guard hit.name.lowercased().hasPrefix(lowered) else { continue }
+            select(hit, extending: false, toggling: false, in: items)
+            selectionNavigation.send((hit.path, false))
+            return
+        }
+    }
     var ancestors: [URL] {
         var result: [URL] = [];
         var url = isSearch ? selected?.url.deletingLastPathComponent() ?? location : location
@@ -406,6 +422,11 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         // HOMY: category, smart-folder and dashboard routes load themselves.
         if !searchingNow, let homy = HomyRoute(route) {
             loadHomy(homy); return
+        }
+        // HOMY: on category and smart-folder routes, search filters that
+        // category instead of leaving it for the whole disk.
+        if searchingNow, let homy = HomyRoute(route), homy.engineQuery != nil {
+            loadHomy(homy, filter: query); return
         }
         let folder = location, hidden = showHidden, text = HomyQuery.translate(query),  // HOMY
             searchScope = scope, type = fileType

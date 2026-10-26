@@ -5,7 +5,6 @@ import SwiftUI
 struct HomyCommandMenu: View {
     let model: SearchModel?
     @ObservedObject private var theme = HomyTheme.shared
-    @AppStorage("homy.favoritesFirst") private var favoritesFirst = false  // HOMY
 
     private var ocrTargets: [Hit] {
         (model?.selectedItems ?? []).filter(TextRecognition.supported)
@@ -69,10 +68,7 @@ struct HomyCommandMenu: View {
         Button("Switch Theme") { theme.toggle() }
             .keyboardShortcut("t", modifiers: [.command, .control])
         Divider()
-        Toggle("Favorites Above Categories", isOn: $favoritesFirst)  // HOMY
-            .onChange(of: favoritesFirst) { _, _ in
-                NotificationCenter.default.post(name: .homySidebarOrderChanged, object: nil)
-            }
+        Button("Reset Sidebar Order") { SidebarSection.resetOrder() }  // HOMY
         Button("Check for Updates…") {  // HOMY
             NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
         }

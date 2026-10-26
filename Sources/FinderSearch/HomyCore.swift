@@ -204,9 +204,8 @@ extension Hit {
 
 // MARK: - Sidebar sections
 
-/// Home and Describe Contents stay pinned at the top; the browse sections
-/// below can sit above or below Favorites (Homy menu → "Favorites Above
-/// Categories").
+/// Home and Describe Contents stay pinned at the top; everything below them
+/// is a reorderable section (drag a section's title onto another's).
 struct HomyPinnedSections: View {
     let select: (String) -> Void
 
@@ -216,25 +215,39 @@ struct HomyPinnedSections: View {
     }
 }
 
-struct HomyBrowseSections: View {
-    let select: (String) -> Void
-    @ObservedObject private var saved = SavedSearches.shared
-
+struct HomyCategorySection: View {
     var body: some View {
-        Section("Categories") {
+        Section {
             ForEach(HomyCategory.allCases) { category in
                 Label(category.title, systemImage: category.symbol)
                     .tag("cat:" + category.rawValue)
             }
+        } header: {
+            SidebarSectionHeader(title: "Categories", section: .categories)
         }
-        Section("Smart Folders") {
+    }
+}
+
+struct HomySmartFolderSection: View {
+    var body: some View {
+        Section {
             ForEach(HomySmartFolder.allCases) { smart in
                 Label(smart.title, systemImage: smart.symbol)
                     .tag("smart:" + smart.rawValue)
             }
+        } header: {
+            SidebarSectionHeader(title: "Smart Folders", section: .smartFolders)
         }
+    }
+}
+
+struct HomySavedSearchSection: View {
+    let select: (String) -> Void
+    @ObservedObject private var saved = SavedSearches.shared
+
+    var body: some View {
         if !saved.entries.isEmpty {
-            Section("Saved Searches") {
+            Section {
                 ForEach(saved.entries) { entry in
                     Button {
                         saved.run(entry, select: select)
@@ -251,6 +264,8 @@ struct HomyBrowseSections: View {
                         Button("Remove") { saved.remove(entry) }
                     }
                 }
+            } header: {
+                SidebarSectionHeader(title: "Saved Searches", section: .savedSearches)
             }
         }
     }
@@ -293,8 +308,10 @@ struct HomySpecialContent: View {
 extension SearchModel {
     /// Category and smart-folder routes fetch through the shared engine and
     /// reuse the model's existing ordering pipeline (hits' didSet sorts).
-    func loadHomy(_ route: HomyRoute) {
-        guard let query = route.engineQuery else {
+    /// HOMY: with a filter, the fetch narrows to names matching the search
+    /// text — searching *within* the category, not the whole disk.
+    func loadHomy(_ route: HomyRoute, filter: String = "") {
+        guard let engineQuery = route.engineQuery else {
             hits = []; selection = []; loading = false; searching = false; return
         }
         generation += 1
@@ -302,16 +319,27 @@ extension SearchModel {
         task?.cancel()
         error = nil
         loading = sortedHits.isEmpty
+        searching = !filter.isEmpty
         let limit = route.engineLimit
         task = Task {
             do {
-                var fields: [String: Any] = ["q": query, "limit": limit]
+                if !filter.isEmpty { try await Task.sleep(for: .milliseconds(120)) }
+                try Task.checkCancellation()
+                var fields: [String: Any] = ["q": engineQuery, "limit": limit]
                 if route != .category(.apps) { fields["in"] = NSHomeDirectory() }
                 let reply = try await HomyServices.shared.engine.request(fields)
-                guard reply.ok else { throw Engine.Failure.message(reply.error ?? "Search failed") }
+                guard reply.ok else {
+                    throw Engine.Failure.message(reply.error ?? "Search failed")
+                }
                 guard revision == self.generation, !Task.isCancelled else { return }
                 var result = reply.hits ?? []
                 if route.needsLocalFilter { result = result.filter(\.isScreenshot) }
+                if !filter.isEmpty {
+                    let tokens = filter.split(separator: " ").map(String.init)
+                    result = result.filter { hit in
+                        tokens.allSatisfy { hit.name.localizedCaseInsensitiveContains($0) }
+                    }
+                }
                 elapsed = Double(reply.took_us ?? 0) / 1000
                 hits = result
                 selection = []

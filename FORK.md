@@ -61,7 +61,9 @@ two-line fix; everything else merges untouched.
 | Menu-bar list of latest downloads | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
 | Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
-| Sidebar order: Favorites above/below Categories | `Sidebar.swift` | Homy menu toggle |
+| **Draggable sidebar sections** — drag any section title (Favorites, Categories, Smart Folders, Saved Searches, Locations, Tags) onto another to reorder; order persists, Reset in Homy menu | `Sidebar.swift` | drag |
+| **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomyCore.swift` | ⌘F |
+| **Type-select** — typing jumps to filenames by prefix, cycling on repeats | `Model.swift`, `App.swift` | just type |
 | Shortcuts actions (Find Files, Get Latest Download, Search in Homy) | `HomyIntents.swift` | Shortcuts.app |
 | Trash-first deletion everywhere | upstream + our tools | ⌫ |
 

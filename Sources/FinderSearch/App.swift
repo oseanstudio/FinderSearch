@@ -131,9 +131,9 @@ struct BrowserView: View {
     @ObservedObject var model: SearchModel
     @ObservedObject private var updates = UpdateCenter.shared  // HOMY
     @State private var showUpdates = false  // HOMY
-    // HOMY: sidebar order; a plain @State so the EquatableView on the sidebar
-    // sees the change (UserDefaults alone would not re-render it).
-    @State private var favoritesFirst = UserDefaults.standard.bool(forKey: "homy.favoritesFirst")
+    // HOMY: sidebar section order; a plain @State so the EquatableView on the
+    // sidebar sees the change (UserDefaults alone would not re-render it).
+    @State private var sidebarOrder = SidebarSection.loadOrder()
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
@@ -142,6 +142,9 @@ struct BrowserView: View {
     @State private var browserWindow: NSWindow?
     @State private var iconSize: Double = 64
     @State private var gridColumns = 5
+    // HOMY: type-select buffer (keystrokes within one second join the prefix).
+    @State private var typeSelectBuffer = ""
+    @State private var typeSelectReset: Task<Void, Never>?
     private let tags = SidebarTags.values
     var body: some View {
         NavigationSplitView {
@@ -150,7 +153,7 @@ struct BrowserView: View {
                     route: model.route, favorites: workspace.favorites,
                     volumes: workspace.volumes, ejectingVolumes: workspace.ejectingVolumes,
                     showDiskAccessHint: model.ready && !model.fullDiskAccess,
-                    favoritesFirst: favoritesFirst),  // HOMY
+                    sections: sidebarOrder),  // HOMY
                 select: { route in
                     fileNavigationActive = false; model.sidebar(route)
                 },
@@ -279,7 +282,7 @@ struct BrowserView: View {
             showUpdates = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .homySidebarOrderChanged)) { _ in  // HOMY
-            favoritesFirst = UserDefaults.standard.bool(forKey: "homy.favoritesFirst")
+            sidebarOrder = SidebarSection.loadOrder()
         }
         .sheet(isPresented: $showUpdates) {  // HOMY
             UpdatesSheet()
@@ -342,6 +345,23 @@ struct BrowserView: View {
                 !(NSApp.keyWindow?.firstResponder is NSTextView)
             else { return event }
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                // HOMY: type-select — typing jumps through filenames by prefix
+                // ("godot" lands on the first godot* item, cycling as you go).
+                if event.specialKey == nil,
+                    event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+                    let characters = event.charactersIgnoringModifiers,
+                    !characters.isEmpty,
+                    characters.unicodeScalars.allSatisfy({ $0.value > 32 && $0.value != 127 })
+                {
+                    typeSelectBuffer += characters
+                    typeSelectReset?.cancel()
+                    typeSelectReset = Task {
+                        try? await Task.sleep(for: .seconds(1))
+                        typeSelectBuffer = ""
+                    }
+                    model.selectTypeAhead(typeSelectBuffer)
+                    return nil
+                }
                 if event.keyCode == 49 { model.preview = model.selected; return nil }
                 if event.keyCode == 36 { model.rename(); return nil }
                 if event.keyCode == 53 { model.selection = []; return nil }

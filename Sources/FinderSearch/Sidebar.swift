@@ -56,6 +56,82 @@ enum FavoriteFolders {
     }
 }
 
+/// HOMY: sidebar sections the user can reorder by dragging one section's
+/// title onto another's. The order persists; missing entries fall back to
+/// the default sequence.
+enum SidebarSection: String, CaseIterable, Hashable {
+    case categories, smartFolders, savedSearches, favorites, locations, tags
+
+    var title: String {
+        switch self {
+        case .categories: return "Categories"
+        case .smartFolders: return "Smart Folders"
+        case .savedSearches: return "Saved Searches"
+        case .favorites: return "Favorites"
+        case .locations: return "Locations"
+        case .tags: return "Tags"
+        }
+    }
+
+    static let orderKey = "homy.sidebarSections"
+
+    static func loadOrder() -> [SidebarSection] {
+        let stored = UserDefaults.standard.stringArray(forKey: orderKey) ?? []
+        var seen = Set<String>()
+        let custom = stored.compactMap { SidebarSection(rawValue: $0) }
+            .filter { seen.insert($0.rawValue).inserted }
+        return custom + allCases.filter { !seen.contains($0.rawValue) }
+    }
+
+    static func saveOrder(_ order: [SidebarSection]) {
+        UserDefaults.standard.set(order.map(\.rawValue), forKey: orderKey)
+        NotificationCenter.default.post(name: .homySidebarOrderChanged, object: nil)
+    }
+
+    /// Drag `dragged` so it sits directly above `target`.
+    static func reorder(_ dragged: SidebarSection, before target: SidebarSection) {
+        var order = loadOrder()
+        guard dragged != target, let from = order.firstIndex(of: dragged),
+            order.firstIndex(of: target) != nil
+        else { return }
+        let item = order.remove(at: from)
+        order.insert(item, at: order.firstIndex(of: target)!)
+        saveOrder(order)
+    }
+
+    static func resetOrder() {
+        UserDefaults.standard.removeObject(forKey: orderKey)
+        saveOrder(allCases)
+    }
+}
+
+/// A section title that accepts drags of other section titles to reorder.
+struct SidebarSectionHeader: View {
+    let title: String
+    let section: SidebarSection
+    @State private var targeted = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 7)).foregroundStyle(.tertiary)
+        }
+        .draggable(section.rawValue)
+        .dropDestination(for: String.self) { items, _ in
+            guard let raw = items.first, let dragged = SidebarSection(rawValue: raw),
+                dragged != section
+            else { return false }
+            SidebarSection.reorder(dragged, before: section)
+            return true
+        } isTargeted: { targeted = $0 }
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.accentColor.opacity(targeted ? 0.2 : 0)))
+        .help("Drag to another section title to reorder")
+    }
+}
+
 /// Folder results and loading phases have no bearing on sidebar content.
 struct SidebarState: Equatable {
     let selection: String?
@@ -63,12 +139,12 @@ struct SidebarState: Equatable {
     let volumes: [MountedVolume]
     let ejectingVolumes: Set<String>
     let showDiskAccessHint: Bool
-    // HOMY: Favorites above or below the fork's Categories block.
-    let favoritesFirst: Bool
+    // HOMY: the user's section order (dragged section titles).
+    let sections: [SidebarSection]
 
     init(
         route: String, favorites: [String], volumes: [MountedVolume], ejectingVolumes: Set<String>,
-        showDiskAccessHint: Bool, favoritesFirst: Bool = false
+        showDiskAccessHint: Bool, sections: [SidebarSection] = SidebarSection.allCases
     ) {
         let home = NSHomeDirectory()
         let fixedRoutes =
@@ -85,7 +161,7 @@ struct SidebarState: Equatable {
         self.volumes = volumes
         self.ejectingVolumes = ejectingVolumes
         self.showDiskAccessHint = showDiskAccessHint
-        self.favoritesFirst = favoritesFirst
+        self.sections = sections
     }
 }
 
@@ -136,67 +212,10 @@ struct BrowserSidebar: View, Equatable {
             )
         ) {
             HomyPinnedSections(select: select)  // HOMY
-            if state.favoritesFirst {  // HOMY: order is a user choice
-                recentsRow
-                favoritesSection
-                HomyBrowseSections(select: select)
-            } else {
-                HomyBrowseSections(select: select)
-                recentsRow
-                favoritesSection
-            }
-            Section("Locations") {
-                row(
-                    "iCloud Drive", "icloud", home + "/Library/Mobile Documents/com~apple~CloudDocs"
-                ).contextMenu {
-                    folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
-                }
-                row((home as NSString).lastPathComponent, "house", home)
-                    .contextMenu { folderActions(home) }
-                ForEach(state.volumes) { volume in
-                    let ejecting = state.ejectingVolumes.contains(volume.id)
-                    let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
-                    HStack {
-                        Label(volume.name, systemImage: "externaldrive")
-                        Spacer(minLength: 4)
-                        if volume.canEject {
-                            Button {
-                                eject(volume)
-                            } label: {
-                                Group {
-                                    if ejecting {
-                                        ProgressView().controlSize(.small)
-                                    } else {
-                                        Image(systemName: "eject.fill").font(.system(size: 11))
-                                            .foregroundStyle(.primary)
-                                    }
-                                }.frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(ejecting)
-                            .help(ejectLabel)
-                            .accessibilityLabel(ejectLabel)
-                        }
-                    }.tag(volume.id)
-                        .contextMenu {
-                            folderActions(volume.id)
-                            if volume.canEject {
-                                Divider()
-                                Button("Eject “\(volume.name)”") { eject(volume) }
-                                    .disabled(ejecting)
-                            }
-                        }
-                }
-            }
-            Section("Tags") {
-                ForEach(SidebarTags.values, id: \.0) { name, color in
-                    Label {
-                        Text(name)
-                    } icon: {
-                        Image(systemName: "circle.fill").font(.system(size: 10))
-                            .foregroundStyle(color)
-                    }.tag("tag:" + name)
-                }
+            recentsRow
+            // HOMY: every section is reorderable by dragging its title.
+            ForEach(state.sections, id: \.self) { section in
+                sectionRows(section)
             }
         }
         // Recreate the native list after a reorder so selection follows the path,
@@ -214,6 +233,18 @@ struct BrowserSidebar: View, Equatable {
         }
     }
 
+    // HOMY: content of each reorderable section.
+    @ViewBuilder private func sectionRows(_ section: SidebarSection) -> some View {
+        switch section {
+        case .categories: HomyCategorySection()
+        case .smartFolders: HomySmartFolderSection()
+        case .savedSearches: HomySavedSearchSection(select: select)
+        case .favorites: favoritesSection
+        case .locations: locationsSection
+        case .tags: tagsSection
+        }
+    }
+
     @ViewBuilder private func folderActions(_ path: String) -> some View {
         Button("Open") { select(path) }
         Button("Open in New Tab") { openInNewTab(URL(fileURLWithPath: path, isDirectory: true)) }
@@ -222,14 +253,12 @@ struct BrowserSidebar: View, Equatable {
         }
     }
 
-    // HOMY: extracted so the Favorites block can sit above or below the
-    // fork's Categories section.
     private var recentsRow: some View {
         Label("Recents", systemImage: "clock").tag("recents")
     }
 
     @ViewBuilder private var favoritesSection: some View {
-        Section("Favorites") {
+        Section {
             ForEach(state.favorites, id: \.self) { path in
                 let label = FavoriteFolders.label(for: path)
                 row(label.name, label.symbol, path)
@@ -248,6 +277,72 @@ struct BrowserSidebar: View, Equatable {
                         }
                     }
             }
+        } header: {
+            SidebarSectionHeader(title: "Favorites", section: .favorites)
+        }
+    }
+
+    @ViewBuilder private var locationsSection: some View {
+        Section {
+            row(
+                "iCloud Drive", "icloud",
+                home + "/Library/Mobile Documents/com~apple~CloudDocs"
+            ).contextMenu {
+                folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
+            }
+            row((home as NSString).lastPathComponent, "house", home)
+                .contextMenu { folderActions(home) }
+            ForEach(state.volumes) { volume in
+                let ejecting = state.ejectingVolumes.contains(volume.id)
+                let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
+                HStack {
+                    Label(volume.name, systemImage: "externaldrive")
+                    Spacer(minLength: 4)
+                    if volume.canEject {
+                        Button {
+                            eject(volume)
+                        } label: {
+                            Group {
+                                if ejecting {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "eject.fill").font(.system(size: 11))
+                                        .foregroundStyle(.primary)
+                                }
+                            }.frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(ejecting)
+                        .help(ejectLabel)
+                        .accessibilityLabel(ejectLabel)
+                    }
+                }.tag(volume.id)
+                    .contextMenu {
+                        folderActions(volume.id)
+                        if volume.canEject {
+                            Divider()
+                            Button("Eject “\(volume.name)”") { eject(volume) }
+                                .disabled(ejecting)
+                        }
+                    }
+            }
+        } header: {
+            SidebarSectionHeader(title: "Locations", section: .locations)
+        }
+    }
+
+    @ViewBuilder private var tagsSection: some View {
+        Section {
+            ForEach(SidebarTags.values, id: \.0) { name, color in
+                Label {
+                    Text(name)
+                } icon: {
+                    Image(systemName: "circle.fill").font(.system(size: 10))
+                        .foregroundStyle(color)
+                }.tag("tag:" + name)
+            }
+        } header: {
+            SidebarSectionHeader(title: "Tags", section: .tags)
         }
     }
 
