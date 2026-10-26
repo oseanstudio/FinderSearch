@@ -133,9 +133,10 @@ struct BrowserView: View {
     @ObservedObject var model: SearchModel
     @ObservedObject private var updates = UpdateCenter.shared  // HOMY
     @State private var showUpdates = false  // HOMY
-    // HOMY: sidebar section order; a plain @State so the EquatableView on the
+    // HOMY: sidebar layout; a plain @State so the EquatableView on the
     // sidebar sees the change (UserDefaults alone would not re-render it).
-    @State private var sidebarOrder = SidebarSection.loadOrder()
+    @State private var sidebarLayout = SidebarLayout.load()
+    @State private var showSidebarCustomize = false
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
@@ -155,7 +156,7 @@ struct BrowserView: View {
                     route: model.route, favorites: workspace.favorites,
                     volumes: workspace.volumes, ejectingVolumes: workspace.ejectingVolumes,
                     showDiskAccessHint: model.ready && !model.fullDiskAccess,
-                    sections: sidebarOrder),  // HOMY
+                    layout: sidebarLayout),  // HOMY
                 select: { route in
                     fileNavigationActive = false; model.sidebar(route)
                 },
@@ -283,8 +284,14 @@ struct BrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .homyShowUpdates)) { _ in  // HOMY
             showUpdates = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .homySidebarOrderChanged)) { _ in  // HOMY
-            sidebarOrder = SidebarSection.loadOrder()
+        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.changed)) { _ in  // HOMY
+            sidebarLayout = SidebarLayout.load()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.customize)) { _ in  // HOMY
+            showSidebarCustomize = true
+        }
+        .sheet(isPresented: $showSidebarCustomize) {  // HOMY
+            CustomizeSidebarSheet()
         }
         .sheet(isPresented: $showUpdates) {  // HOMY
             UpdatesSheet()

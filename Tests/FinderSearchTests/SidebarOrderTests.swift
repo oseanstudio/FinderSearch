@@ -50,30 +50,53 @@ final class TypeSelectTests: XCTestCase {
     }
 }
 
-final class SidebarSectionTests: XCTestCase {
+final class SidebarLayoutTests: XCTestCase {
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: SidebarSection.orderKey)
+        UserDefaults.standard.removeObject(forKey: SidebarLayout.key)
     }
 
-    func testLoadOrderFillsMissingSections() {
-        UserDefaults.standard.set(["favorites"], forKey: SidebarSection.orderKey)
-        let order = SidebarSection.loadOrder()
-        XCTAssertEqual(order.first, .favorites)
-        XCTAssertEqual(Set(order), Set(SidebarSection.allCases))
-        XCTAssertEqual(order.count, SidebarSection.allCases.count)
+    private func stored(_ sections: [String], hidden: [String] = []) {
+        let data = try! JSONEncoder().encode(
+            ["sections": sections, "hidden": hidden] as [String: [String]])
+        UserDefaults.standard.set(data, forKey: SidebarLayout.key)
     }
 
-    func testUnknownEntriesAreDropped() {
-        UserDefaults.standard.set(["favorites", "bogus", "tags"], forKey: SidebarSection.orderKey)
-        let order = SidebarSection.loadOrder()
-        XCTAssertEqual(order.first, .favorites)
-        XCTAssertEqual(order[1], .tags)
-        XCTAssertFalse(order.contains { $0.rawValue == "bogus" })
+    func testLoadFillsMissingSectionsAndDropsUnknown() {
+        stored(["favorites", "bogus", "tags"])
+        let layout = SidebarLayout.load()
+        XCTAssertEqual(layout.sections.first, .favorites)
+        XCTAssertEqual(layout.sections[1], .tags)
+        XCTAssertFalse(layout.sections.contains { $0.rawValue == "bogus" })
+        XCTAssertEqual(Set(layout.sections), Set(SidebarSection.allCases))
     }
 
     func testEmptyStorageKeepsDefaultOrder() {
-        UserDefaults.standard.removeObject(forKey: SidebarSection.orderKey)
-        XCTAssertEqual(SidebarSection.loadOrder(), Array(SidebarSection.allCases))
+        UserDefaults.standard.removeObject(forKey: SidebarLayout.key)
+        let layout = SidebarLayout.load()
+        XCTAssertEqual(layout.sections, Array(SidebarSection.allCases))
+        XCTAssertTrue(layout.hidden.isEmpty)
+    }
+
+    func testHiddenRoundTripAndVisibility() {
+        stored(Array(SidebarSection.allCases.map(\.rawValue)), hidden: ["sec:tags", "row:recents"])
+        let layout = SidebarLayout.load()
+        XCTAssertTrue(layout.isHidden("sec:tags"))
+        XCTAssertTrue(layout.isHidden("row:recents"))
+        XCTAssertFalse(layout.visibleSections.contains(.tags))
+        XCTAssertEqual(layout.visibleSections.count, SidebarSection.allCases.count - 1)
+    }
+
+    func testMoveKeepsHiddenSectionsPresent() {
+        stored(Array(SidebarSection.allCases.map(\.rawValue)), hidden: ["sec:tags"])
+        var layout = SidebarLayout.load()
+        // Simulate the drag coordinator: favorites moved to the front.
+        var ordered = layout.visibleSections.filter { $0 != .favorites }
+        ordered.insert(.favorites, at: 0)
+        layout.sections = ordered + layout.sections.filter { !ordered.contains($0) }
+        layout.save()
+        let reloaded = SidebarLayout.load()
+        XCTAssertEqual(reloaded.sections.first, .favorites)
+        XCTAssertTrue(reloaded.isHidden("sec:tags"), "hidden sections survive a drag")
     }
 }
 

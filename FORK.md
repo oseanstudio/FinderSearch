@@ -68,7 +68,7 @@ two-line fix; everything else merges untouched.
 | **Custom smart folders** — rule builder (kind, size, age, name contains, downloaded from) persisted alongside the built-ins; edit/delete via right-click | `CollectionsAndRules.swift` | sidebar |
 | **Open at the matched spot** — Describe Contents results open PDFs at the matched page and video/audio at the matched moment in their own window | `SpotPreview.swift` | double-click |
 | **Big Folders space map** — per-folder size bars with drill-down inside Clean Up | `SpaceMap.swift` | Clean Up |
-| **Draggable sidebar sections** — drag any section title (Favorites, Categories, Smart Folders, Saved Searches, Locations, Tags) onto another to reorder; order persists, Reset in Homy menu | `Sidebar.swift` | drag |
+| **Finder-style sidebar customization** — drag a section title and it lifts, follows the cursor with an insertion line, and drops into place; right-click any section, row or built-in (Home, Recents, Categories, Smart Folders, Tags, iCloud…) → Remove from Sidebar; **Customize Sidebar…** (right-click or Hearth menu) restores anything, and Reset starts over. Layout persists. | `Sidebar.swift` | drag / right-click |
 | **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomyCore.swift` | ⌘F |
 | **Type-select** — typing jumps to filenames by prefix, cycling on repeats | `Model.swift`, `App.swift` | just type |
 | Shortcuts actions (Find Files, Get Latest Download, Search in Homy) | `HomyIntents.swift` | Shortcuts.app |

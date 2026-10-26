@@ -56,10 +56,10 @@ enum FavoriteFolders {
     }
 }
 
-/// HOMY: sidebar sections the user can reorder by dragging one section's
-/// title onto another's. The order persists; missing entries fall back to
-/// the default sequence.
-enum SidebarSection: String, CaseIterable, Hashable {
+/// HOMY: sidebar sections. Their order comes from the user's layout (drag a
+/// section title to move it), and anything — sections or built-in rows — can
+/// be hidden from the sidebar and restored via Customize Sidebar.
+enum SidebarSection: String, CaseIterable, Hashable, Codable {
     case categories, smartFolders, collections, savedSearches, favorites, locations, tags
 
     var title: String {
@@ -73,44 +73,145 @@ enum SidebarSection: String, CaseIterable, Hashable {
         case .tags: return "Tags"
         }
     }
+}
 
-    static let orderKey = "homy.sidebarSections"
+/// HOMY: the user's sidebar — section order plus everything they removed.
+/// Hidden identifiers are "sec:<section>" or "row:<id>"; missing sections in
+/// a stored order fall back to the default sequence.
+struct SidebarLayout: Codable, Equatable {
+    var sections: [SidebarSection]
+    var hidden: Set<String>
 
-    static func loadOrder() -> [SidebarSection] {
-        let stored = UserDefaults.standard.stringArray(forKey: orderKey) ?? []
-        var seen = Set<String>()
-        let custom = stored.compactMap { SidebarSection(rawValue: $0) }
-            .filter { seen.insert($0.rawValue).inserted }
-        return custom + allCases.filter { !seen.contains($0.rawValue) }
+    private enum CodingKeys: String, CodingKey { case sections, hidden }
+
+    init(sections: [SidebarSection], hidden: Set<String>) {
+        self.sections = sections
+        self.hidden = hidden
     }
 
-    static func saveOrder(_ order: [SidebarSection]) {
-        UserDefaults.standard.set(order.map(\.rawValue), forKey: orderKey)
-        NotificationCenter.default.post(name: .homySidebarOrderChanged, object: nil)
+    // Set is not Codable; persist the hidden ids as a sorted array. Unknown
+    // section names (from a future version) are dropped, not fatal.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let names = try container.decode([String].self, forKey: .sections)
+        sections = names.compactMap(SidebarSection.init(rawValue:))
+        hidden = Set(try container.decode([String].self, forKey: .hidden))
     }
 
-    /// Drag `dragged` so it sits directly above `target`.
-    static func reorder(_ dragged: SidebarSection, before target: SidebarSection) {
-        var order = loadOrder()
-        guard dragged != target, let from = order.firstIndex(of: dragged),
-            order.firstIndex(of: target) != nil
-        else { return }
-        let item = order.remove(at: from)
-        order.insert(item, at: order.firstIndex(of: target)!)
-        saveOrder(order)
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sections, forKey: .sections)
+        try container.encode(hidden.sorted(), forKey: .hidden)
     }
 
-    static func resetOrder() {
-        UserDefaults.standard.removeObject(forKey: orderKey)
-        saveOrder(allCases)
+    static let key = "homy.sidebarLayout"
+    static let changed = Notification.Name("homy.sidebarLayoutChanged")
+    static let customize = Notification.Name("homy.customizeSidebar")
+
+    static func load() -> SidebarLayout {
+        var layout = SidebarLayout(sections: Array(SidebarSection.allCases), hidden: [])
+        if let data = UserDefaults.standard.data(forKey: key),
+            let stored = try? JSONDecoder().decode(SidebarLayout.self, from: data)
+        {
+            layout = stored
+        }
+        // Fill in sections this version knows that the stored layout lacks.
+        for section in SidebarSection.allCases where !layout.sections.contains(section) {
+            layout.sections.append(section)
+        }
+        layout.sections.removeAll { !SidebarSection.allCases.contains($0) }
+        return layout
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: Self.key)
+        }
+        NotificationCenter.default.post(name: Self.changed, object: nil)
+    }
+
+    func isHidden(_ id: String) -> Bool { hidden.contains(id) }
+
+    mutating func setHidden(_ id: String, _ hidden: Bool) {
+        if hidden {
+            self.hidden.insert(id)
+        } else {
+            self.hidden.remove(id)
+        }
+    }
+
+    mutating func reset() {
+        sections = Array(SidebarSection.allCases)
+        hidden = []
+    }
+
+    var visibleSections: [SidebarSection] {
+        sections.filter { !hidden.contains("sec:" + $0.rawValue) }
     }
 }
 
-/// A section title that accepts drags of other section titles to reorder.
+/// HOMY: Finder-style drag for section titles. A gesture on each title lifts
+/// a floating preview that follows the cursor, shows an insertion line at
+/// the nearest boundary, and reorders on release.
+@MainActor final class SidebarDragCoordinator: ObservableObject {
+    static let shared = SidebarDragCoordinator()
+
+    struct Session: Equatable {
+        let section: SidebarSection
+        let grabOffset: CGPoint
+        var location: CGPoint
+        var slot: Int  // insertion slot among the other visible sections
+    }
+
+    @Published var session: Session?
+    @Published var frames: [SidebarSection: CGRect] = [:]
+
+    func reportFrame(_ section: SidebarSection, _ frame: CGRect) {
+        if frames[section] != frame { frames[section] = frame }
+    }
+
+    func changed(_ section: SidebarSection, _ value: DragGesture.Value) {
+        if session == nil {
+            guard let frame = frames[section] else { return }
+            let start = value.startLocation
+            session = Session(
+                section: section,
+                grabOffset: CGPoint(x: start.x - frame.minX, y: start.y - frame.minY),
+                location: value.location, slot: 0)
+        }
+        session?.location = value.location
+        session?.slot = slot(at: value.location, dragged: section)
+    }
+
+    /// How many of the other visible section titles sit above the point.
+    private func slot(at point: CGPoint, dragged: SidebarSection) -> Int {
+        let others = SidebarLayout.load().visibleSections.filter { $0 != dragged }
+        return others.filter { section in
+            (frames[section]?.midY ?? .infinity) < point.y
+        }.count
+    }
+
+    func ended() {
+        guard let session else { return }
+        self.session = nil
+        var layout = SidebarLayout.load()
+        var ordered = layout.visibleSections.filter { $0 != session.section }
+        ordered.insert(session.section, at: min(session.slot, ordered.count))
+        // Hidden sections keep existing (they come back via Customize), at
+        // the end; their position is invisible until restored.
+        layout.sections = ordered + layout.sections.filter { !ordered.contains($0) }
+        layout.save()
+    }
+}
+
+/// A section title: drag handle (Finder-style lift and insertion line) plus
+/// the right-click menu for removing the section and customizing.
 struct SidebarSectionHeader: View {
     let title: String
     let section: SidebarSection
-    @State private var targeted = false
+    @ObservedObject private var drag = SidebarDragCoordinator.shared
+
+    private var isDragged: Bool { drag.session?.section == section }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -118,18 +219,113 @@ struct SidebarSectionHeader: View {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 7)).foregroundStyle(.tertiary)
         }
-        .draggable(section.rawValue)
-        .dropDestination(for: String.self) { items, _ in
-            guard let raw = items.first, let dragged = SidebarSection(rawValue: raw),
-                dragged != section
-            else { return false }
-            SidebarSection.reorder(dragged, before: section)
-            return true
-        } isTargeted: { targeted = $0 }
+        .opacity(isDragged ? 0.35 : 1)
         .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.accentColor.opacity(targeted ? 0.2 : 0)))
-        .help("Drag to another section title to reorder")
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { drag.reportFrame(section, geo.frame(in: .named("SidebarList"))) }
+                    .onChange(of: geo.frame(in: .named("SidebarList"))) { _, frame in
+                        drag.reportFrame(section, frame)
+                    }
+            }
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 4, coordinateSpace: .named("SidebarList"))
+                .onChanged { drag.changed(section, $0) }
+                .onEnded { _ in drag.ended() }
+        )
+        .contextMenu { headerMenu }
+        .help("Drag to reorder · right-click for options")
+    }
+
+    @ViewBuilder private var headerMenu: some View {
+        Button("Remove from Sidebar") {
+            var layout = SidebarLayout.load()
+            layout.setHidden("sec:" + section.rawValue, true)
+            layout.save()
+        }
+        Button("Customize Sidebar…") {
+            NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
+        }
+    }
+}
+
+/// HOMY: standard context menu for hideable built-in sidebar rows.
+struct SidebarRowMenu: View {
+    let itemID: String
+    @ViewBuilder var body: some View {
+        Button("Remove from Sidebar") {
+            var layout = SidebarLayout.load()
+            layout.setHidden(itemID, true)
+            layout.save()
+        }
+        Button("Customize Sidebar…") {
+            NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
+        }
+    }
+}
+
+/// HOMY: the floating drag preview and insertion line, drawn over the list.
+struct SidebarDragOverlay: View {
+    @ObservedObject private var drag = SidebarDragCoordinator.shared
+
+    var body: some View {
+        Group {
+            if let session = drag.session {
+                insertionLine(session)
+                liftPreview(session)
+            }
+        }.allowsHitTesting(false)
+    }
+
+    /// Accent line at the boundary the section would land at.
+    @ViewBuilder private func insertionLine(_ session: SidebarDragCoordinator.Session) -> some View {
+        let layout = SidebarLayout.load()
+        let others = layout.visibleSections.filter { $0 != session.section }
+        let ordered = others.compactMap { drag.frames[$0] }.sorted { $0.minY < $1.minY }
+        let line: CGRect? = {
+            guard !ordered.isEmpty else { return nil }
+            if session.slot < ordered.count {
+                let frame = ordered[session.slot]
+                return CGRect(
+                    x: frame.minX, y: frame.minY - 3, width: frame.width + 60, height: 3)
+            }
+            let frame = ordered[ordered.count - 1]
+            return CGRect(
+                x: frame.minX, y: frame.maxY + 2, width: frame.width + 60, height: 3)
+        }()
+        if let line {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color.accentColor)
+                .frame(width: line.width, height: line.height)
+                .position(x: line.midX, y: line.midY)
+                .shadow(radius: 1)
+        }
+    }
+
+    /// The lifted title following the cursor.
+    @ViewBuilder private func liftPreview(_ session: SidebarDragCoordinator.Session) -> some View {
+        if let frame = drag.frames[session.section] {
+            HStack(spacing: 4) {
+                Text(session.section.title)
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 7)).foregroundStyle(.tertiary)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .frame(width: max(90, min(frame.width + 24, 190)), alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.25), radius: 6, y: 2))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.12)))
+            .position(
+                x: session.location.x - session.grabOffset.x + frame.width / 2,
+                y: session.location.y - session.grabOffset.y + frame.height / 2)
+        }
     }
 }
 
@@ -140,15 +336,15 @@ struct SidebarState: Equatable {
     let volumes: [MountedVolume]
     let ejectingVolumes: Set<String>
     let showDiskAccessHint: Bool
-    // HOMY: the user's section order (dragged section titles).
-    let sections: [SidebarSection]
+    // HOMY: the user's sidebar layout (dragged sections, hidden items).
+    let layout: SidebarLayout
 
     @MainActor init(
         route: String, favorites: [String], volumes: [MountedVolume], ejectingVolumes: Set<String>,
-        showDiskAccessHint: Bool, sections: [SidebarSection] = SidebarSection.allCases
+        showDiskAccessHint: Bool, layout: SidebarLayout = SidebarLayout.load()
     ) {
         let home = NSHomeDirectory()
-        let fixedRoutes =
+        var fixedRoutes =
             [
                 "recents", home,
                 home + "/Library/Mobile Documents/com~apple~CloudDocs",
@@ -157,6 +353,9 @@ struct SidebarState: Equatable {
             + HomyRoute.sidebarSelectionRoutes  // HOMY
             + HomyCollections.shared.items.map { "col:" + $0.id.uuidString }  // HOMY
             + HomySmartRules.shared.items.map { "rule:" + $0.id.uuidString }  // HOMY
+        // HOMY: hidden rows cannot be selected, so an active route inside a
+        // removed row still selects nothing.
+        fixedRoutes = fixedRoutes.filter { !layout.isHidden("row:" + $0) || $0 == route }
         // An ordinary child folder selects no sidebar row. Moving between such
         // folders should leave the entire sidebar untouched.
         selection = (fixedRoutes + favorites + volumes.map(\.id)).contains(route) ? route : nil
@@ -164,7 +363,7 @@ struct SidebarState: Equatable {
         self.volumes = volumes
         self.ejectingVolumes = ejectingVolumes
         self.showDiskAccessHint = showDiskAccessHint
-        self.sections = sections
+        self.layout = layout
     }
 }
 
@@ -207,19 +406,27 @@ struct BrowserSidebar: View, Equatable {
     }
 
     private var locations: some View {
-        List(
-            selection: Binding<String?>(
-                get: { state.selection },
-                set: { if let route = $0 { select(route) } }
-            )
-        ) {
-            HomyPinnedSections(select: select)  // HOMY
-            recentsRow
-            // HOMY: every section is reorderable by dragging its title.
-            ForEach(state.sections, id: \.self) { section in
-                sectionRows(section)
+        ZStack(alignment: .topLeading) {  // HOMY: hosts the drag overlay
+            List(
+                selection: Binding<String?>(
+                    get: { state.selection },
+                    set: { if let route = $0 { select(route) } }
+                )
+            ) {
+                HomyPinnedSections(select: select, layout: state.layout)  // HOMY
+                if !state.layout.isHidden("row:recents") {  // HOMY
+                    recentsRow
+                        .contextMenu { SidebarRowMenu(itemID: "row:recents") }
+                }
+                // HOMY: drag a section's title to move it; right-click hides.
+                ForEach(state.layout.visibleSections, id: \.self) { section in
+                    sectionRows(section)
+                }
             }
+            SidebarDragOverlay()  // HOMY
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .coordinateSpace(name: "SidebarList")
         // Recreate the native list after a reorder so selection follows the path,
         // rather than the previous row index retained by AppKit.
         .id(state.favorites)
@@ -235,16 +442,19 @@ struct BrowserSidebar: View, Equatable {
         }
     }
 
-    // HOMY: content of each reorderable section.
+    // HOMY: content of each reorderable section; right-click hides a whole
+    // section, individual rows hide via their own context menus.
     @ViewBuilder private func sectionRows(_ section: SidebarSection) -> some View {
-        switch section {
-        case .categories: HomyCategorySection()
-        case .smartFolders: HomySmartFolderSection()
-        case .collections: HomyCollectionSection(select: select)  // HOMY
-        case .savedSearches: HomySavedSearchSection(select: select)
-        case .favorites: favoritesSection
-        case .locations: locationsSection
-        case .tags: tagsSection
+        if !state.layout.isHidden("sec:" + section.rawValue) {
+            switch section {
+            case .categories: HomyCategorySection(layout: state.layout)
+            case .smartFolders: HomySmartFolderSection(layout: state.layout)
+            case .collections: HomyCollectionSection(select: select)
+            case .savedSearches: HomySavedSearchSection(select: select)
+            case .favorites: favoritesSection
+            case .locations: locationsSection
+            case .tags: tagsSection
+            }
         }
     }
 
@@ -287,14 +497,24 @@ struct BrowserSidebar: View, Equatable {
 
     @ViewBuilder private var locationsSection: some View {
         Section {
-            row(
-                "iCloud Drive", "icloud",
-                home + "/Library/Mobile Documents/com~apple~CloudDocs"
-            ).contextMenu {
-                folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
+            if !state.layout.isHidden("row:loc:icloud") {  // HOMY
+                row(
+                    "iCloud Drive", "icloud",
+                    home + "/Library/Mobile Documents/com~apple~CloudDocs"
+                ).contextMenu {
+                    folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
+                    Divider()
+                    SidebarRowMenu(itemID: "row:loc:icloud")
+                }
             }
-            row((home as NSString).lastPathComponent, "house", home)
-                .contextMenu { folderActions(home) }
+            if !state.layout.isHidden("row:loc:home") {  // HOMY
+                row((home as NSString).lastPathComponent, "house", home)
+                    .contextMenu {
+                        folderActions(home)
+                        Divider()
+                        SidebarRowMenu(itemID: "row:loc:home")
+                    }
+            }
             ForEach(state.volumes) { volume in
                 let ejecting = state.ejectingVolumes.contains(volume.id)
                 let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
@@ -337,12 +557,15 @@ struct BrowserSidebar: View, Equatable {
     @ViewBuilder private var tagsSection: some View {
         Section {
             ForEach(SidebarTags.values, id: \.0) { name, color in
-                Label {
-                    Text(name)
-                } icon: {
-                    Image(systemName: "circle.fill").font(.system(size: 10))
-                        .foregroundStyle(color)
-                }.tag("tag:" + name)
+                if !state.layout.isHidden("row:tag:" + name) {  // HOMY
+                    Label {
+                        Text(name)
+                    } icon: {
+                        Image(systemName: "circle.fill").font(.system(size: 10))
+                            .foregroundStyle(color)
+                    }.tag("tag:" + name)
+                        .contextMenu { SidebarRowMenu(itemID: "row:tag:" + name) }
+                }
             }
         } header: {
             SidebarSectionHeader(title: "Tags", section: .tags)
@@ -351,5 +574,77 @@ struct BrowserSidebar: View, Equatable {
 
     private func row(_ name: String, _ symbol: String, _ path: String) -> some View {
         Label(name, systemImage: symbol).tag(path)
+    }
+}
+
+
+/// HOMY: restore anything removed from the sidebar, Finder-style.
+struct CustomizeSidebarSheet: View {
+    @State private var layout = SidebarLayout.load()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section("Pinned") {
+                toggle("Home", "row:home")
+                toggle("Describe Contents", "row:semantic")
+                toggle("Recents", "row:recents")
+            }
+            ForEach(layout.sections, id: \.self) { section in
+                Section(section.title) {
+                    toggle("Entire Section", "sec:" + section.rawValue)
+                    builtInRows(section)
+                }
+            }
+        }
+        .frame(minWidth: 380, minHeight: 460)
+        .navigationTitle("Customize Sidebar")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Reset Sidebar") {
+                    layout.reset()
+                    layout.save()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func builtInRows(_ section: SidebarSection) -> some View {
+        switch section {
+        case .categories:
+            ForEach(HomyCategory.allCases) { category in
+                toggle(category.title, "row:cat:" + category.rawValue)
+            }
+        case .smartFolders:
+            ForEach(HomySmartFolder.allCases) { smart in
+                toggle(smart.title, "row:smart:" + smart.rawValue)
+            }
+        case .locations:
+            toggle("iCloud Drive", "row:loc:icloud")
+            toggle((NSHomeDirectory() as NSString).lastPathComponent, "row:loc:home")
+        case .tags:
+            ForEach(SidebarTags.values, id: \.0) { name, _ in
+                toggle(name, "row:tag:" + name)
+            }
+        case .favorites, .collections, .savedSearches:
+            EmptyView()
+        }
+    }
+
+    private func toggle(_ title: String, _ id: String) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { !layout.isHidden(id) },
+                set: { visible in
+                    layout.setHidden(id, !visible)
+                    layout.save()
+                }
+            )
+        ) {
+            Text(title)
+        }
     }
 }

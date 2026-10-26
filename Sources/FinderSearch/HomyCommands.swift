@@ -68,7 +68,14 @@ struct HomyCommandMenu: View {
         Button("Switch Theme") { theme.toggle() }
             .keyboardShortcut("t", modifiers: [.command, .control])
         Divider()
-        Button("Reset Sidebar Order") { SidebarSection.resetOrder() }  // HOMY
+        Button("Customize Sidebar…") {  // HOMY
+            NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
+        }
+        Button("Reset Sidebar") {
+            var layout = SidebarLayout.load()
+            layout.reset()
+            layout.save()
+        }
         Button("Check for Updates…") {  // HOMY
             NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
         }

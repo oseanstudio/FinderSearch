@@ -242,19 +242,31 @@ extension Hit {
 /// is a reorderable section (drag a section's title onto another's).
 struct HomyPinnedSections: View {
     let select: (String) -> Void
+    let layout: SidebarLayout
 
     var body: some View {
-        Label("Home", systemImage: "house.fill").tag("home")
-        Label("Describe Contents", systemImage: "text.magnifyingglass").tag("semantic")  // DIGUP
+        if !layout.isHidden("row:home") {
+            Label("Home", systemImage: "house.fill").tag("home")
+                .contextMenu { SidebarRowMenu(itemID: "row:home") }
+        }
+        if !layout.isHidden("row:semantic") {
+            Label("Describe Contents", systemImage: "text.magnifyingglass").tag("semantic")  // DIGUP
+                .contextMenu { SidebarRowMenu(itemID: "row:semantic") }
+        }
     }
 }
 
 struct HomyCategorySection: View {
+    let layout: SidebarLayout
+
     var body: some View {
         Section {
             ForEach(HomyCategory.allCases) { category in
-                Label(category.title, systemImage: category.symbol)
-                    .tag("cat:" + category.rawValue)
+                if !layout.isHidden("row:cat:" + category.rawValue) {
+                    Label(category.title, systemImage: category.symbol)
+                        .tag("cat:" + category.rawValue)
+                        .contextMenu { SidebarRowMenu(itemID: "row:cat:" + category.rawValue) }
+                }
             }
         } header: {
             SidebarSectionHeader(title: "Categories", section: .categories)
@@ -263,11 +275,18 @@ struct HomyCategorySection: View {
 }
 
 struct HomySmartFolderSection: View {
+    let layout: SidebarLayout
+
     var body: some View {
         Section {
             ForEach(HomySmartFolder.allCases) { smart in
-                Label(smart.title, systemImage: smart.symbol)
-                    .tag("smart:" + smart.rawValue)
+                if !layout.isHidden("row:smart:" + smart.rawValue) {
+                    Label(smart.title, systemImage: smart.symbol)
+                        .tag("smart:" + smart.rawValue)
+                        .contextMenu {
+                            SidebarRowMenu(itemID: "row:smart:" + smart.rawValue)
+                        }
+                }
             }
             HomyUserRulesSection()  // HOMY: user-built smart folders
         } header: {
@@ -304,11 +323,6 @@ struct HomySavedSearchSection: View {
             }
         }
     }
-}
-
-extension Notification.Name {
-    /// Favorites/Categories ordering flipped; BrowserView re-renders the sidebar.
-    static let homySidebarOrderChanged = Notification.Name("homy.sidebarOrderChanged")
 }
 
 // MARK: - Special content routing
