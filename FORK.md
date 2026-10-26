@@ -58,7 +58,7 @@ two-line fix; everything else merges untouched.
 | Quick Search from any app, Spotlight-style | `QuickSearch.swift` | ⇧⌘Space (global) |
 | **Describe Contents** — semantic search inside files via [DigUp](https://github.com/ARahim3/DigUp) | `DigUpBridge.swift`, `DigUpSemantic.swift` | ⇧⌘F, sidebar |
 | **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Homy menu, toolbar bell |
-| Menu-bar list of latest downloads | `MenuBarDownloads.swift` | menu bar |
+| Menu-bar quick search — the menu-bar icon opens a search bar (live results, ↩ opens top hit) plus latest download, free disk space and Quick Search/Updates shortcuts | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
 | Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
 | **Draggable sidebar sections** — drag any section title (Favorites, Categories, Smart Folders, Saved Searches, Locations, Tags) onto another to reorder; order persists, Reset in Homy menu | `Sidebar.swift` | drag |

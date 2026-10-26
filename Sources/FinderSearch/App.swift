@@ -15,9 +15,11 @@ import UniformTypeIdentifiers
             }
         }
         .defaultSize(width: 1050, height: 680).windowToolbarStyle(.unified)
-        MenuBarExtra("Downloads", systemImage: "arrow.down.circle") {  // HOMY
+        MenuBarExtra("FinderSearch", systemImage: "arrow.down.circle") {  // HOMY
             MenuBarDownloadsView()
         }
+        // Window style: the menu needs a live text field for its search bar.
+        .menuBarExtraStyle(.window)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Window") { openWindow(id: "browser") }.keyboardShortcut("n")
