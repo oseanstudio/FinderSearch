@@ -4,6 +4,20 @@ import XCTest
 // HOMY: user-defined content — smart-rule query compilation and collection
 // merging.
 
+final class FullDiskAccessTests: XCTestCase {
+    // HOMY: the Full Disk Access pane lists only Applications-folder apps,
+    // so the enable flow must tell dist-built Hearth apart.
+    func testApplicationsPathDetection() {
+        XCTAssertTrue(FullDiskAccess.isInApplications("/Applications/Hearth.app"))
+        XCTAssertTrue(
+            FullDiskAccess.isInApplications(NSHomeDirectory() + "/Applications/Hearth.app"))
+        XCTAssertFalse(
+            FullDiskAccess.isInApplications(
+                NSHomeDirectory() + "/Documents/Github/findersearch-fork/dist/Hearth.app"))
+        XCTAssertFalse(FullDiskAccess.isInApplications("/System/Applications/X.app"))
+    }
+}
+
 final class SmartRuleTests: XCTestCase {
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: HomySmartRules.key)

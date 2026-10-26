@@ -191,8 +191,7 @@ struct BrowserSidebar: View, Equatable {
             if state.showDiskAccessHint {
                 Divider()
                 Button {
-                    NSWorkspace.shared.open(
-                        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                    FullDiskAccess.requestEnable()  // HOMY: offers a move when dist-built
                 } label: {
                     Text("Enable Full Disk Access…")
                         .font(.caption).multilineTextAlignment(.leading)

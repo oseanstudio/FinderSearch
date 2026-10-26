@@ -488,8 +488,26 @@ struct UpdateOffer: Identifiable {
 
     func relaunchFork() {
         guard let repo = Self.repoRoot else { return }
-        let app = repo.appendingPathComponent("dist/Hearth.app")
-        NSWorkspace.shared.open(app)
+        let fresh = repo.appendingPathComponent("dist/Hearth.app")
+        // HOMY: when Hearth runs from Applications (the Full Disk Access
+        // flow installs it there), refresh that copy and relaunch into it —
+        // otherwise the user would bounce back to the repo build.
+        let installed = Bundle.main.bundleURL
+        if FullDiskAccess.isInApplications(installed.path),
+            installed.lastPathComponent == "Hearth.app"
+        {
+            do {
+                if FileManager.default.fileExists(atPath: installed.path) {
+                    try FileManager.default.removeItem(at: installed)
+                }
+                try FileManager.default.copyItem(at: fresh, to: installed)
+                NSWorkspace.shared.open(installed)
+            } catch {
+                NSWorkspace.shared.open(fresh)
+            }
+        } else {
+            NSWorkspace.shared.open(fresh)
+        }
         NSApp.terminate(nil)
     }
 

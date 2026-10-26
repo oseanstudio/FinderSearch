@@ -12,6 +12,78 @@ enum FullDiskAccess {
         try? handle.close()
         return true
     }
+
+    // HOMY: macOS lists only Applications-folder apps in the Full Disk Access
+    // pane. A Hearth built into a repo's dist/ folder opens the pane with
+    // nothing to toggle — offer a move instead.
+    static let settingsURL =
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
+
+    static func isInApplications(_ path: String) -> Bool {
+        path.hasPrefix("/Applications/")
+            || path.hasPrefix(NSHomeDirectory() + "/Applications/")
+    }
+
+    static var runsFromApplications: Bool {
+        isInApplications(Bundle.main.bundleURL.path)
+    }
+
+    /// The sidebar's "Enable Full Disk Access…" entry point.
+    static func requestEnable() {
+        guard !runsFromApplications else {
+            NSWorkspace.shared.open(settingsURL)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Hearth isn't in your Applications folder"
+        alert.informativeText =
+            "macOS only lists apps from Applications in the Full Disk Access pane, so Hearth "
+            + "doesn't appear there yet. Move it to Applications (settings are kept), or "
+            + "open the pane and add it manually with the + button."
+        alert.addButton(withTitle: "Move to /Applications")
+        alert.addButton(withTitle: "Add Manually…")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            moveAndRelaunch()
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(settingsURL)
+        default:
+            break
+        }
+    }
+
+    /// Copies the running bundle into Applications and relaunches from there.
+    /// TCC identity follows the bundle identifier, so settings survive.
+    static func moveAndRelaunch() {
+        let bundle = Bundle.main.bundleURL
+        let destinations = [
+            URL(fileURLWithPath: "/Applications/Hearth.app"),
+            URL(fileURLWithPath: NSHomeDirectory() + "/Applications/Hearth.app"),
+        ]
+        guard
+            let destination = destinations.first(where: { candidate in
+                let parent = candidate.deletingLastPathComponent()
+                return FileManager.default.fileExists(atPath: parent.path)
+                    && FileManager.default.isWritableFile(atPath: parent.path)
+            })
+        else {
+            // Nowhere writable: the manual + route is the fallback.
+            NSWorkspace.shared.open(settingsURL)
+            return
+        }
+        do {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: bundle, to: destination)
+        } catch {
+            NSWorkspace.shared.open(settingsURL)
+            return
+        }
+        NSWorkspace.shared.open(destination)
+        NSApp.terminate(nil)
+    }
 }
 
 extension Hit {
