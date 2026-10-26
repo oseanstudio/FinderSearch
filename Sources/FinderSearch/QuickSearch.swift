@@ -14,11 +14,19 @@ import Combine
     @Published var searching = false
     private var task: Task<Void, Never>?
     private var generation = 0
+    private var recentsLoaded = false
+    // HOMY: the app-wide shared engine; the model stays inert until the
+    // panel is first shown, so launching the app spawns nothing.
     private let engine: Engine
 
-    init(engine: Engine = Engine()) {
+    init(engine: Engine = HomyServices.shared.engine) {
         self.engine = engine
-        Task { await loadRecents() }
+    }
+
+    /// HOMY: called when the panel is shown, not at launch — the first open
+    /// warms the recents list; later opens refresh it silently.
+    func warm() async {
+        await loadRecents()
     }
 
     private func loadRecents() async {
@@ -27,8 +35,11 @@ import Combine
                 "op": "recent", "limit": 12,
             ]), reply.ok
         else { return }
+        recentsLoaded = true
         recents = reply.hits ?? []
-        results = reply.hits ?? []
+        if query.trimmingCharacters(in: .whitespaces).isEmpty {
+            results = recents
+        }
     }
 
     private func schedule() {
@@ -231,7 +242,8 @@ enum NSMoveCommand { case moveUp, moveDown }
     static let signature: OSType = 0x484F4D59  // 'HOMY'
     static let identifier: UInt32 = 1
 
-    let model = QuickSearchModel()
+    // HOMY: lazy — created on the first toggle/show, never at launch.
+    private(set) lazy var model = QuickSearchModel()
     private var panel: NSPanel?
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
@@ -311,7 +323,11 @@ enum NSMoveCommand { case moveUp, moveDown }
         panel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         model.query = ""
-        model.results = model.recents
+        // HOMY: recents load on first show (and refresh after), not at launch.
+        Task {
+            await model.warm()
+            if model.query.isEmpty { model.results = model.recents }
+        }
     }
 
     func hide() {

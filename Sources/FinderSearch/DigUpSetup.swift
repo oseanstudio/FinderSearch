@@ -64,13 +64,13 @@ struct DigUpInstallState {
             else {
                 throw DigUpError("The latest DigUp release has no DMG to install.")
             }
-            // DigUp.app must not be running while it is replaced.
+            // DigUp.app must not be running while it is replaced. The guarded
+            // script quits without launching; run it off the main actor.
             installStage = "Closing DigUp if it is running…"
-            let quit = Process()
-            quit.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            quit.arguments = ["-e", "tell application \"DigUp\" to quit saving no"]
-            try? quit.run()
-            quit.waitUntilExit()
+            let quitScript =
+                "if application \"DigUp\" is running then\ntell application \"DigUp\" to quit saving no\nend if"
+            try? await runProcess(
+                URL(fileURLWithPath: "/usr/bin/osascript"), ["-e", quitScript]) { _ in }
 
             let temporary = FileManager.default.temporaryDirectory
                 .appendingPathComponent("digup-install-\(UUID().uuidString)", isDirectory: true)
@@ -90,7 +90,7 @@ struct DigUpInstallState {
             installStage = "Mounting the disk image…"
             let mount = temporary.appendingPathComponent("mount", isDirectory: true)
             try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
-            try runTool("/usr/bin/hdiutil", [
+            try await runTool("/usr/bin/hdiutil", [
                 "attach", dmg.path, "-nobrowse", "-readonly", "-quiet",
                 "-mountpoint", mount.path,
             ])
@@ -174,22 +174,23 @@ struct DigUpInstallState {
 
     // MARK: tool helpers
 
-    @discardableResult
-    private func runTool(_ path: String, _ arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let text = String(decoding: data, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
+    private func runTool(_ path: String, _ arguments: [String]) async throws {
+        // hdiutil can take a beat; keep it off the main actor.
+        let (text, status) = try await Task.detached(priority: .userInitiated) { () -> (String, Int32) in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = arguments
+            let output = Pipe()
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return (String(decoding: data, as: UTF8.self), process.terminationStatus)
+        }.value
+        guard status == 0 else {
             throw DigUpError(text.split(separator: "\n").last.map(String.init) ?? "\(path) failed")
         }
-        return text
     }
 
     /// Fire-and-forget cleanup: detaching must work from a defer, so it cannot

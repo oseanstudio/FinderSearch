@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 /// Fixed-height AppKit rows avoid SwiftUI Table's automatic-height diffing work
 /// when hundreds of search results are replaced by a cached folder listing.
@@ -50,6 +51,11 @@ import AppKit
             return coordinator.items[row].path
         }
         table.addSubview(marquee)
+        // HOMY: type-select and search-result jumps scroll the table too.
+        coordinator.navigationSubscriber = model.selectionNavigation.sink {
+            [weak coordinator] request in
+            Task { @MainActor in coordinator?.scrollToPath(request.path) }
+        }
         scroll.contentView.postsBoundsChangedNotifications = true
         coordinator.scrollObserver = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main
@@ -72,6 +78,14 @@ import AppKit
         private weak var renameField: RenameTextField?
         private var actions: [Int: @MainActor () -> Void] = [:]
         var scrollObserver: NSObjectProtocol?
+        var navigationSubscriber: AnyCancellable?  // HOMY
+
+        /// HOMY: bring a navigated-to row into view without touching the
+        /// user's scroll position otherwise.
+        func scrollToPath(_ path: String) {
+            guard let table, let row = rowByPath[path] else { return }
+            table.scrollRowToVisible(row)
+        }
         private var restoredRoute: String?
         private var displayedTab: UUID?
         init(_ parent: FileList) { self.parent = parent }

@@ -64,6 +64,10 @@ two-line fix; everything else merges untouched.
 | Menu-bar quick search — the menu-bar icon opens a search bar (live results, ↩ opens top hit) plus latest download, free disk space and Quick Search/Updates shortcuts | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
 | Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
+| **Custom collections** — named folder groups ("Work" = ~/Projects + ~/Invoices) as a reorderable sidebar section, Home shelves, searchable like categories; create with the sidebar's New Collection… row, manage via right-click | `CollectionsAndRules.swift` | sidebar |
+| **Custom smart folders** — rule builder (kind, size, age, name contains, downloaded from) persisted alongside the built-ins; edit/delete via right-click | `CollectionsAndRules.swift` | sidebar |
+| **Open at the matched spot** — Describe Contents results open PDFs at the matched page and video/audio at the matched moment in their own window | `SpotPreview.swift` | double-click |
+| **Big Folders space map** — per-folder size bars with drill-down inside Clean Up | `SpaceMap.swift` | Clean Up |
 | **Draggable sidebar sections** — drag any section title (Favorites, Categories, Smart Folders, Saved Searches, Locations, Tags) onto another to reorder; order persists, Reset in Homy menu | `Sidebar.swift` | drag |
 | **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomyCore.swift` | ⌘F |
 | **Type-select** — typing jumps to filenames by prefix, cycling on repeats | `Model.swift`, `App.swift` | just type |

@@ -58,20 +58,20 @@ final class HomyQueryTests: XCTestCase {
 
 /// Homy fork: route parsing round-trips every sidebar destination.
 final class HomyRouteTests: XCTestCase {
-    func testRoundTripsAllRoutes() {
+    @MainActor func testRoundTripsAllRoutes() {
         for route in HomyRoute.allCases {
             XCTAssertEqual(HomyRoute(route.route), route)
         }
     }
 
-    func testRejectsOrdinaryPaths() {
+    @MainActor func testRejectsOrdinaryPaths() {
         XCTAssertNil(HomyRoute("/Users/example/Documents"))
         XCTAssertNil(HomyRoute("recents"))
         XCTAssertNil(HomyRoute("tag:Red"))
         XCTAssertNil(HomyRoute("cat:unknown"))
     }
 
-    func testTitlesAndQueries() {
+    @MainActor func testTitlesAndQueries() {
         XCTAssertEqual(HomyRoute("cat:images")?.title, "Images")
         XCTAssertEqual(HomyRoute("smart:large")?.engineQuery, "size:>100mb kind:file")
         XCTAssertNil(HomyRoute("home")?.engineQuery)

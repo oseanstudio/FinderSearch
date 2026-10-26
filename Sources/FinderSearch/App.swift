@@ -390,10 +390,22 @@ struct BrowserView: View {
     private var searchScopeBar: some View {
         HStack(spacing: 10) {
             Text("Search:").foregroundStyle(.secondary)
-            Button("This Mac") { model.scope = "" }.buttonStyle(.bordered).tint(
-                model.scope.isEmpty ? .accentColor : .secondary)
-            Button(model.location.lastPathComponent) { model.scope = model.location.path }
-                .buttonStyle(.bordered).tint(model.scope.isEmpty ? .secondary : .accentColor)
+            // HOMY: on a category or smart-folder route the search narrows to
+            // it; the control makes that visible and widens in one click.
+            if HomyRoute(model.route)?.engineQuery != nil {
+                Picker("Scope", selection: $model.homySearchWholeDisk) {
+                    Text("In \(model.title)").tag(false)
+                    Text("This Mac").tag(true)
+                }.pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .labelsHidden()
+                    .frame(width: 230)
+            } else {
+                Button("This Mac") { model.scope = "" }.buttonStyle(.bordered).tint(
+                    model.scope.isEmpty ? .accentColor : .secondary)
+                Button(model.location.lastPathComponent) { model.scope = model.location.path }
+                    .buttonStyle(.bordered).tint(model.scope.isEmpty ? .secondary : .accentColor)
+            }
             Spacer()
             Picker("Kind", selection: $model.fileType) {
                 Text("Any Kind").tag(""); Text("Folder").tag("dir"); Text("Document").tag("doc");

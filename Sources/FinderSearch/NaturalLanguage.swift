@@ -45,8 +45,12 @@ struct HomyParsedQuery: Equatable {
 }
 
 enum HomyQuery {
-    /// Extra runtime options the chips bar toggles; read on the main actor.
-    static var includeContents = false
+    /// Extra runtime options the chips bar toggles; persisted so it survives
+    /// relaunches. HOMY
+    static var includeContents: Bool {
+        get { UserDefaults.standard.bool(forKey: "homy.includeContents") }
+        set { UserDefaults.standard.set(newValue, forKey: "homy.includeContents") }
+    }
 
     private static let typeWords: [String: String] = [
         "pdf": "pdf", "pdfs": "pdf",

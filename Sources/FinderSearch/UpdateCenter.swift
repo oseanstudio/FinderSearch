@@ -82,19 +82,54 @@ enum GitHubReleases {
         return try JSONDecoder.standard.decode(Release.self, from: data)
     }
 
-    /// Fetches a release asset to disk (a DMG is small enough to buffer).
+    /// Fetches a release asset to disk, streaming in chunks so even a large
+    /// asset never sits in memory. HOMY
     static func download(
         url: URL, to destination: URL,
         progress: @escaping (Double, Int64, Int64) -> Void
     ) async throws {
         var request = URLRequest(url: url)
         request.timeoutInterval = 300
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw DigUpError("The download failed (\((response as? HTTPURLResponse)?.statusCode ?? 0)).")
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw DigUpError("The download failed (\(status)).")
         }
-        try data.write(to: destination)
-        progress(1, Int64(data.count), Int64(data.count))
+        let total = (response as? HTTPURLResponse)?.expectedContentLength ?? -1
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil),
+            let handle = try? FileHandle(forWritingTo: destination)
+        else {
+            throw DigUpError("Could not write the download to disk.")
+        }
+        defer { try? handle.close() }
+        var written: Int64 = 0
+        var buffer = Data()
+        buffer.reserveCapacity(1 << 20)
+        let chunkLimit = 1 << 20
+        var lastReport = Date.distantPast
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+                if buffer.count >= chunkLimit {
+                    try handle.write(contentsOf: buffer)
+                    written += Int64(buffer.count)
+                    buffer.removeAll(keepingCapacity: true)
+                    if Date().timeIntervalSince(lastReport) > 0.1 {
+                        lastReport = Date()
+                        let known = total > 0
+                        progress(known ? Double(written) / Double(total) : 0, written, max(total, 0))
+                    }
+                }
+            }
+            if !buffer.isEmpty {
+                try handle.write(contentsOf: buffer)
+                written += Int64(buffer.count)
+            }
+            progress(1, written, total > 0 ? total : written)
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
     }
 
     static func format(_ bytes: Int64) -> String {
@@ -460,38 +495,44 @@ struct UpdateOffer: Identifiable {
 
     // MARK: process helpers
 
+    /// HOMY: the blocking reads run detached — `brew list` alone stalls the
+    /// main actor for a second or two.
     static func which(_ name: String) async -> URL? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [name]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let path = String(decoding: data, as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !path.isEmpty else { return nil }
-            return URL(fileURLWithPath: path)
-        } catch {
-            return nil
-        }
+        await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            process.arguments = [name]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0 else { return nil }
+                let path = String(decoding: data, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !path.isEmpty else { return nil }
+                return URL(fileURLWithPath: path)
+            } catch {
+                return nil
+            }
+        }.value
     }
 
     private func runCapture(_ path: String, _ arguments: [String]) async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return String(decoding: data, as: UTF8.self)
+        }.value
     }
 
     /// Streams a script's output into the log, line by line. The PATH keeps

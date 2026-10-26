@@ -463,6 +463,20 @@ struct DigUpHit: Identifiable, Decodable, Hashable {
         Task { _ = try? await request(["op": "embed_ahead", "q": text], timeout: 30) }
     }
 
+    /// HOMY: the service's render op — a JPEG of the exact matched PDF page
+    /// or video moment, cached beside the index until the service restarts.
+    /// Returns nil for kinds it cannot render.
+    func render(path: String, kind: String, loc: Double?, pixels: Int) async -> NSImage? {
+        guard ensureConnected() else { return nil }
+        var fields: [String: Any] = ["op": "render", "path": path, "kind": kind, "pixels": pixels]
+        if let loc { fields["loc"] = loc }
+        guard
+            let reply = try? await request(fields, timeout: 60),
+            let imagePath = reply["image"] as? String
+        else { return nil }
+        return NSImage(contentsOfFile: imagePath)
+    }
+
     // MARK: stdout
 
     private func consume(_ chunk: Data) {

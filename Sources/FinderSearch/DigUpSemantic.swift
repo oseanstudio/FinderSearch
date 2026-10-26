@@ -13,6 +13,7 @@ import AppKit
     @Published var embedMS = 0
     @Published var searchMS = 0
     @Published var searching = false
+    @Published var selected = 0  // HOMY: keyboard-highlighted result
     @Published var kindFilter: String? { didSet { if !query.isEmpty { runNow() } } }
     @Published var showFolders = false
     private var task: Task<Void, Never>?
@@ -34,7 +35,7 @@ import AppKit
         task?.cancel()
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count >= 2 else {
-            hits = []; strong = 0; searching = false
+            hits = []; strong = 0; selected = 0; searching = false
             return
         }
         // Let the encoder start on what is typed so far; the search itself
@@ -62,6 +63,7 @@ import AppKit
             let result = try await DigUpService.shared.search(
                 text, kinds: kindFilter.map { [$0] } ?? [])
             hits = result.hits
+            selected = 0
             strong = result.strong
             meaning = result.meaning
             embedMS = result.embedMS
@@ -81,6 +83,7 @@ struct SemanticSearchView: View {
     @StateObject private var setup = DigUpSetupModel()
     @StateObject private var indexing = DigUpIndexingModel()
     @StateObject private var service = DigUpService.shared
+    @StateObject private var navigator = HomyKeyNavigator()  // HOMY: keyboard support
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -116,6 +119,28 @@ struct SemanticSearchView: View {
             DigUpService.shared.prewarm()
             fieldFocused = true
         }
+        .onAppear { installNavigator() }
+        .onDisappear { navigator.remove() }
+    }
+
+    // HOMY: arrows step through results even while typing in the field;
+    // Space Quick Looks and Return opens the highlighted one once focus
+    // leaves the field.
+    private func installNavigator() {
+        navigator.install(
+            isActive: { model.route == "semantic" && !search.hits.isEmpty },
+            arrowsWhileEditing: true,
+            onMove: { delta in
+                search.selected = min(max(0, search.selected + delta), search.hits.count - 1)
+            },
+            onPreview: {
+                guard search.hits.indices.contains(search.selected) else { return }
+                model.preview = search.hits[search.selected].asHit
+            },
+            onOpen: {
+                guard search.hits.indices.contains(search.selected) else { return }
+                SpotPreviewController.shared.open(search.hits[search.selected])
+            })
     }
 
     private var indexingStrip: some View {
@@ -210,8 +235,9 @@ struct SemanticSearchView: View {
                         .font(.caption).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                ForEach(search.hits) { hit in
-                    DigUpResultRow(hit: hit)
+                ForEach(Array(search.hits.enumerated()), id: \.element.id) {
+                    index, hit in
+                    DigUpResultRow(hit: hit, highlighted: index == search.selected)
                 }
                 if !search.hits.isEmpty {
                     Text(String(format: "embed %d ms · search %d ms · %@", search.embedMS, search.searchMS,
@@ -268,11 +294,12 @@ struct SemanticSearchView: View {
 
 struct DigUpResultRow: View {
     let hit: DigUpHit
+    var highlighted = false  // HOMY: keyboard selection
     @ObservedObject private var theme = HomyTheme.shared
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            FileThumbnail(hit: hit.asHit, size: 44)
+            DigUpSegmentThumb(hit: hit)  // DIGUP: exact page/frame thumbnails
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(hit.name).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
@@ -297,11 +324,15 @@ struct DigUpResultRow: View {
             Spacer(minLength: 0)
         }.padding(10)
             .background(RoundedRectangle(cornerRadius: theme.cardRadius).fill(theme.cardFill))
+            .overlay(
+                RoundedRectangle(cornerRadius: theme.cardRadius)
+                    .stroke(highlighted ? Color.accentColor : Color.clear, lineWidth: 2))
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) { open() }
-            .onTapGesture { }
+            .onTapGesture(count: 2) { SpotPreviewController.shared.open(hit) }  // DIGUP
+            .onTapGesture {}
             .contextMenu {
-                Button("Open") { open() }
+                Button("Open at Matched Spot") { SpotPreviewController.shared.open(hit) }
+                Button("Open File Normally") { hit.asHit.url.openInWorkspace() }
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([hit.asHit.url])
                 }
@@ -311,9 +342,5 @@ struct DigUpResultRow: View {
                     NSPasteboard.general.setString(hit.path, forType: .string)
                 }
             }
-    }
-
-    private func open() {
-        _ = NSWorkspace.shared.open(hit.asHit.url)
     }
 }

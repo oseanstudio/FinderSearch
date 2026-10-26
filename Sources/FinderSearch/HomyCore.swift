@@ -73,6 +73,8 @@ enum HomyRoute: Equatable, CaseIterable {
     case semantic  // DIGUP: describe-contents search
     case category(HomyCategory)
     case smart(HomySmartFolder)
+    case collection(UUID)  // HOMY: user-defined folder group
+    case rule(UUID)  // HOMY: user-defined smart folder
     case sources
     case duplicates
     case cleanup
@@ -100,6 +102,14 @@ enum HomyRoute: Equatable, CaseIterable {
                 rawValue: String(route.dropFirst(6)))
             {
                 self = .smart(smart)
+            } else if route.hasPrefix("col:"), let id = UUID(
+                uuidString: String(route.dropFirst(4)))
+            {
+                self = .collection(id)  // HOMY
+            } else if route.hasPrefix("rule:"), let id = UUID(
+                uuidString: String(route.dropFirst(5)))
+            {
+                self = .rule(id)  // HOMY
             } else {
                 return nil
             }
@@ -112,6 +122,8 @@ enum HomyRoute: Equatable, CaseIterable {
         case .semantic: return "semantic"
         case .category(let category): return "cat:" + category.rawValue
         case .smart(let smart): return "smart:" + smart.rawValue
+        case .collection(let id): return "col:" + id.uuidString
+        case .rule(let id): return "rule:" + id.uuidString
         case .sources: return "sources"
         case .duplicates: return "dupes"
         case .cleanup: return "cleanup"
@@ -122,24 +134,30 @@ enum HomyRoute: Equatable, CaseIterable {
         allCases.map(\.route)
     }
 
-    var title: String {
+    @MainActor var title: String {
         switch self {
         case .home: return "Home"
         case .semantic: return "Describe Contents"
         case .category(let category): return category.title
         case .smart(let smart): return smart.title
+        case .collection(let id):
+            return HomyCollections.shared.items.first { $0.id == id }?.name ?? "Collection"
+        case .rule(let id):
+            return HomySmartRules.shared.items.first { $0.id == id }?.name ?? "Smart Folder"
         case .sources: return "Downloaded From"
         case .duplicates: return "Duplicates"
         case .cleanup: return "Clean Up"
         }
     }
 
-    var symbol: String {
+    @MainActor var symbol: String {
         switch self {
         case .home: return "house.fill"
         case .semantic: return "text.magnifyingglass"
         case .category(let category): return category.symbol
         case .smart(let smart): return smart.symbol
+        case .collection: return "square.stack.3d.up"
+        case .rule: return "slider.horizontal.3"
         case .sources: return "globe.desk"
         case .duplicates: return "square.on.square"
         case .cleanup: return "sparkles"
@@ -147,13 +165,28 @@ enum HomyRoute: Equatable, CaseIterable {
     }
 
     /// Non-nil routes render through the normal file surfaces.
-    var engineQuery: String? {
+    @MainActor var engineQuery: String? {
         switch self {
-        case .home, .semantic, .sources, .duplicates, .cleanup: return nil
+        case .home, .semantic, .collection, .sources, .duplicates, .cleanup: return nil
         case .category(let category): return category.query
         case .smart(.large): return "size:>100mb kind:file"
         case .smart(.screenshots): return "Screenshot kind:file"
+        case .rule(let id): return HomySmartRules.shared.query(for: id)
         }
+    }
+
+    /// HOMY: routes whose toolbar search filters the route itself.
+    @MainActor var searchFiltersSelf: Bool {
+        if case .collection = self { return true }
+        return engineQuery != nil
+    }
+
+    /// HOMY: a where-from source the results must match (rules only).
+    @MainActor var sourceFilter: String? {
+        if case .rule(let id) = self {
+            return HomySmartRules.shared.items.first { $0.id == id }?.source
+        }
+        return nil
     }
 
     var engineLimit: Int {
@@ -194,8 +227,9 @@ extension Hit {
     var isPDF: Bool { url.pathExtension.lowercased() == "pdf" }
 }
 
-/// Shared services for Homy surfaces: a second stdio client so dashboard and
-/// panel queries never queue behind a tab's search.
+/// Shared services for Homy surfaces. HOMY: one stdio engine client for the
+/// whole app — tabs, Homy views, Quick Search and the menu bar all queue on
+/// this instance instead of each spawning their own fsearch process.
 @MainActor final class HomyServices {
     static let shared = HomyServices()
     let engine: Engine = Engine()
@@ -235,6 +269,7 @@ struct HomySmartFolderSection: View {
                 Label(smart.title, systemImage: smart.symbol)
                     .tag("smart:" + smart.rawValue)
             }
+            HomyUserRulesSection()  // HOMY: user-built smart folders
         } header: {
             SidebarSectionHeader(title: "Smart Folders", section: .smartFolders)
         }
@@ -306,11 +341,16 @@ struct HomySpecialContent: View {
 // MARK: - Engine-backed route loading
 
 extension SearchModel {
-    /// Category and smart-folder routes fetch through the shared engine and
-    /// reuse the model's existing ordering pipeline (hits' didSet sorts).
-    /// HOMY: with a filter, the fetch narrows to names matching the search
-    /// text — searching *within* the category, not the whole disk.
+    /// Category, smart-folder, collection and rule routes fetch through the
+    /// shared engine and reuse the model's existing ordering pipeline (hits'
+    /// didSet sorts). HOMY: with a filter, results narrow to names matching
+    /// the search text — searching *within* the route, not the whole disk.
     func loadHomy(_ route: HomyRoute, filter: String = "") {
+        // Collections merge one query per member folder instead.
+        if case .collection(let id) = route {
+            loadCollection(id, filter: filter)
+            return
+        }
         guard let engineQuery = route.engineQuery else {
             hits = []; selection = []; loading = false; searching = false; return
         }
@@ -321,6 +361,7 @@ extension SearchModel {
         loading = sortedHits.isEmpty
         searching = !filter.isEmpty
         let limit = route.engineLimit
+        let source = route.sourceFilter
         task = Task {
             do {
                 if !filter.isEmpty { try await Task.sleep(for: .milliseconds(120)) }
@@ -334,12 +375,13 @@ extension SearchModel {
                 guard revision == self.generation, !Task.isCancelled else { return }
                 var result = reply.hits ?? []
                 if route.needsLocalFilter { result = result.filter(\.isScreenshot) }
-                if !filter.isEmpty {
-                    let tokens = filter.split(separator: " ").map(String.init)
-                    result = result.filter { hit in
-                        tokens.allSatisfy { hit.name.localizedCaseInsensitiveContains($0) }
-                    }
+                if let source, !source.isEmpty {
+                    let fetched = result
+                    result = (try? await BackgroundWork.run {
+                        fetched.filter { HomyQuery.matchesSource($0, source: source) }
+                    }) ?? fetched
                 }
+                result = Self.filteredByRoute(result, route: route, filter: filter)
                 elapsed = Double(reply.took_us ?? 0) / 1000
                 hits = result
                 selection = []
@@ -350,6 +392,39 @@ extension SearchModel {
                 self.error = error.localizedDescription
                 hits = []; selection = []; loading = false; searching = false
             }
+        }
+    }
+
+    /// HOMY: name filtering shared by every engine-backed route search.
+    private static func filteredByRoute(_ hits: [Hit], route: HomyRoute, filter: String) -> [Hit]
+    {
+        guard !filter.isEmpty else { return hits }
+        let tokens = filter.split(separator: " ").map(String.init)
+        return hits.filter { hit in
+            tokens.allSatisfy { hit.name.localizedCaseInsensitiveContains($0) }
+        }
+    }
+
+    /// HOMY: a collection's files — one concurrent query per member folder,
+    /// merged, then filtered like any other route.
+    private func loadCollection(_ id: UUID, filter: String) {
+        generation += 1
+        let revision = generation
+        task?.cancel()
+        error = nil
+        loading = sortedHits.isEmpty
+        searching = !filter.isEmpty
+        let folders = HomyCollections.shared.collection(id)?.folders ?? []
+        Task { [weak self] in
+            if !filter.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
+            var result = await HomyCollections.files(in: folders, limit: 2000)
+            guard let self, revision == self.generation, !Task.isCancelled else { return }
+            result = Self.filteredByRoute(result, route: .collection(id), filter: filter)
+            self.elapsed = 0
+            self.hits = result
+            self.selection = []
+            self.loading = false
+            self.searching = false
         }
     }
 }

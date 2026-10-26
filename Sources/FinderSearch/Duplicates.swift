@@ -295,7 +295,9 @@ enum DuplicateScanner {
 struct DuplicatesView: View {
     @ObservedObject var model: SearchModel
     @StateObject private var data = DuplicatesModel()
+    @StateObject private var navigator = HomyKeyNavigator()  // HOMY: keyboard support
     @ObservedObject private var theme = HomyTheme.shared
+    @State private var selectedGroup = 0
 
     private enum ScanScope: Hashable { case home, folder }
     @State private var scanScope: ScanScope = .home
@@ -329,8 +331,11 @@ struct DuplicatesView: View {
                     // Lazy: a home library can yield hundreds of groups; an
                     // eager VStack would build every card on the main thread.
                     LazyVStack(spacing: 14) {
-                        ForEach($data.groups) { $group in
-                            DuplicateGroupCard(group: $group, data: data, model: model)
+                        ForEach(Array(data.groups.enumerated()), id: \.element.id) {
+                            index, group in
+                            DuplicateGroupCard(
+                                group: groupBinding(index), data: data, model: model,
+                                highlighted: index == selectedGroup)
                         }
                     }.padding(16)
                 }
@@ -348,6 +353,43 @@ struct DuplicatesView: View {
             }
         }.background(Color(nsColor: .windowBackgroundColor))
             .task { if !data.scanning && data.groups.isEmpty { startScan() } }
+            .onAppear { installNavigator() }
+            .onDisappear { navigator.remove() }
+            .onChange(of: data.groups.count) { _, count in
+                selectedGroup = min(max(0, selectedGroup), max(0, count - 1))
+            }
+    }
+
+    private func groupBinding(_ index: Int) -> Binding<DuplicateGroup> {
+        Binding(
+            get: { data.groups.indices.contains(index) ? data.groups[index] : data.groups[0] },
+            set: { if data.groups.indices.contains(index) { data.groups[index] = $0 } })
+    }
+
+    /// HOMY: arrows step through groups, Space Quick Looks the keeper,
+    /// Return opens it. Active only on the duplicates route.
+    private func installNavigator() {
+        navigator.install(
+            isActive: { model.route == "dupes" && !data.groups.isEmpty && !data.scanning },
+            onMove: { delta in
+                selectedGroup = min(max(0, selectedGroup + delta), data.groups.count - 1)
+            },
+            onPreview: {
+                guard data.groups.indices.contains(selectedGroup),
+                    let file = data.groups[selectedGroup].files.first(where: {
+                        $0.hit.path == data.groups[selectedGroup].keeper
+                    })
+                else { return }
+                model.preview = file.hit
+            },
+            onOpen: {
+                guard data.groups.indices.contains(selectedGroup),
+                    let file = data.groups[selectedGroup].files.first(where: {
+                        $0.hit.path == data.groups[selectedGroup].keeper
+                    })
+                else { return }
+                file.hit.url.openInWorkspace()
+            })
     }
 
     private var subtitle: String {
@@ -373,6 +415,7 @@ struct DuplicateGroupCard: View {
     @Binding var group: DuplicateGroup
     @ObservedObject var data: DuplicatesModel
     @ObservedObject var model: SearchModel
+    var highlighted = false  // HOMY: keyboard selection
     @ObservedObject private var theme = HomyTheme.shared
 
     var body: some View {
@@ -424,5 +467,11 @@ struct DuplicateGroupCard: View {
             }
         }.padding(14)
             .background(RoundedRectangle(cornerRadius: theme.cardRadius).fill(theme.cardFill))
+            .overlay(
+                // HOMY: keyboard-selected card.
+                RoundedRectangle(cornerRadius: theme.cardRadius)
+                    .stroke(
+                        highlighted ? Color.accentColor : Color.clear,
+                        lineWidth: 2))
     }
 }

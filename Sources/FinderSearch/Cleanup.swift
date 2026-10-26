@@ -61,33 +61,48 @@ struct CleanupCard: Identifiable {
         generation += 1
         let revision = generation
         loading = true
-        var loaded: [CleanupCard] = []
-        for definition in Self.definitions {
-            var files: [Hit] = []
-            for (folder, query) in definition.queries {
-                var fields: [String: Any] = ["q": query, "limit": 1000]
-                if !folder.isEmpty { fields["in"] = folder }
-                guard
-                    let reply = try? await HomyServices.shared.engine.request(fields),
-                    reply.ok
-                else { continue }
-                files += reply.hits ?? []
+        // HOMY: cards load concurrently instead of one engine round-trip at
+        // a time; results are re-ordered to the fixed definition order.
+        var loaded: [CleanupCard] = await withTaskGroup(
+            of: CleanupCard.self
+        ) { group in
+            for definition in Self.definitions {
+                group.addTask { await Self.loadCard(definition) }
             }
-            if definition.id == "screenshots" {
-                files = files.filter { $0.isScreenshot && $0.kind == "file" }
-            } else {
-                files = files.filter { $0.kind == "file" }
-            }
-            files.sort { $0.size > $1.size }
-            loaded.append(
-                CleanupCard(
-                    id: definition.id, title: definition.title, subtitle: definition.subtitle,
-                    symbol: definition.symbol, queries: definition.queries, files: files,
-                    loaded: true))
+            var cards: [CleanupCard] = []
+            for await card in group { cards.append(card) }
+            return cards
         }
         guard revision == generation else { return }
+        loaded = Self.definitions.compactMap { definition in
+            loaded.first { $0.id == definition.id }
+        }
         cards = loaded
         loading = false
+    }
+
+    /// HOMY: one card's queries, off the caller's actor.
+    private static func loadCard(_ definition: CleanupCard) async -> CleanupCard {
+        var files: [Hit] = []
+        for (folder, query) in definition.queries {
+            var fields: [String: Any] = ["q": query, "limit": 1000]
+            if !folder.isEmpty { fields["in"] = folder }
+            guard
+                let reply = try? await HomyServices.shared.engine.request(fields),
+                reply.ok
+            else { continue }
+            files += reply.hits ?? []
+        }
+        if definition.id == "screenshots" {
+            files = files.filter { $0.isScreenshot && $0.kind == "file" }
+        } else {
+            files = files.filter { $0.kind == "file" }
+        }
+        files.sort { $0.size > $1.size }
+        return CleanupCard(
+            id: definition.id, title: definition.title, subtitle: definition.subtitle,
+            symbol: definition.symbol, queries: definition.queries, files: files,
+            loaded: true)
     }
 
     func trash(_ hits: [Hit], cardID: String, via model: SearchModel) {
@@ -142,6 +157,7 @@ struct CleanupView: View {
                         Spacer()
                     }.padding(.vertical, 50)
                 }
+                BigFoldersCard()  // HOMY: space map at a glance
                 ForEach(data.cards) { card in
                     CleanupCardView(
                         card: card, expanded: $expanded, data: data, model: model)

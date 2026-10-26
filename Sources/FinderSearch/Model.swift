@@ -42,6 +42,11 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         }
     }
     @Published var scope = "" { didSet { if !query.isEmpty { schedule() } } }
+    // HOMY: on category/smart-folder routes, search filters that route by
+    // default; this flag widens the search to the whole disk.
+    @Published var homySearchWholeDisk = false {
+        didSet { if isSearch { schedule(immediate: true) } }
+    }
     @Published var fileType = "" { didSet { schedule() } }
     @Published var hits: [Hit] = [] { didSet { invalidateDerived() } }
     @Published var extraHits: [Hit] = [] {
@@ -122,8 +127,9 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
     private let diskAccessCheck: @Sendable () -> Bool
     private let folderLoader: @Sendable (URL, Bool) async throws -> [Hit]
     private let folderPreviewLoader: @Sendable (URL, Bool) async throws -> [Hit]
+    // HOMY: the default engine is the app-wide shared client (HomyServices).
     init(
-        engine: any SearchService = Engine(),
+        engine: any SearchService = HomyServices.shared.engine,
         searchDebounce: Duration = .milliseconds(50),
         diskAccessCheck: @escaping @Sendable () -> Bool = { FullDiskAccess.isGranted() },
         folderLoader: @escaping @Sendable (URL, Bool) async throws -> [Hit] = {
@@ -423,9 +429,12 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         if !searchingNow, let homy = HomyRoute(route) {
             loadHomy(homy); return
         }
-        // HOMY: on category and smart-folder routes, search filters that
-        // category instead of leaving it for the whole disk.
-        if searchingNow, let homy = HomyRoute(route), homy.engineQuery != nil {
+        // HOMY: on category, smart-folder, collection and rule routes, search
+        // filters that route instead of the whole disk — unless the scope
+        // control widened it.
+        if searchingNow, let homy = HomyRoute(route), homy.searchFiltersSelf,
+            !homySearchWholeDisk
+        {
             loadHomy(homy, filter: query); return
         }
         let folder = location, hidden = showHidden, text = HomyQuery.translate(query),  // HOMY

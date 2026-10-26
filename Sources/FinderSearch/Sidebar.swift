@@ -60,12 +60,13 @@ enum FavoriteFolders {
 /// title onto another's. The order persists; missing entries fall back to
 /// the default sequence.
 enum SidebarSection: String, CaseIterable, Hashable {
-    case categories, smartFolders, savedSearches, favorites, locations, tags
+    case categories, smartFolders, collections, savedSearches, favorites, locations, tags
 
     var title: String {
         switch self {
         case .categories: return "Categories"
         case .smartFolders: return "Smart Folders"
+        case .collections: return "Collections"
         case .savedSearches: return "Saved Searches"
         case .favorites: return "Favorites"
         case .locations: return "Locations"
@@ -142,7 +143,7 @@ struct SidebarState: Equatable {
     // HOMY: the user's section order (dragged section titles).
     let sections: [SidebarSection]
 
-    init(
+    @MainActor init(
         route: String, favorites: [String], volumes: [MountedVolume], ejectingVolumes: Set<String>,
         showDiskAccessHint: Bool, sections: [SidebarSection] = SidebarSection.allCases
     ) {
@@ -154,6 +155,8 @@ struct SidebarState: Equatable {
             ]
             + SidebarTags.values.map { "tag:" + $0.0 }
             + HomyRoute.sidebarSelectionRoutes  // HOMY
+            + HomyCollections.shared.items.map { "col:" + $0.id.uuidString }  // HOMY
+            + HomySmartRules.shared.items.map { "rule:" + $0.id.uuidString }  // HOMY
         // An ordinary child folder selects no sidebar row. Moving between such
         // folders should leave the entire sidebar untouched.
         selection = (fixedRoutes + favorites + volumes.map(\.id)).contains(route) ? route : nil
@@ -238,6 +241,7 @@ struct BrowserSidebar: View, Equatable {
         switch section {
         case .categories: HomyCategorySection()
         case .smartFolders: HomySmartFolderSection()
+        case .collections: HomyCollectionSection(select: select)  // HOMY
         case .savedSearches: HomySavedSearchSection(select: select)
         case .favorites: favoritesSection
         case .locations: locationsSection

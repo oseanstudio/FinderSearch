@@ -92,6 +92,25 @@ import AppKit
     }
 }
 
+/// HOMY: full-width menu row with a hover highlight, like a real menu item.
+private struct MenuRowStyle: ButtonStyle {
+    var tint = Color.primary
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.primary.opacity(hovering ? 0.09 : 0)))
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+    }
+}
+
 struct MenuBarDownloadsView: View {
     @StateObject private var model = MenuBarDownloadsModel()
     @StateObject private var search = MenuBarSearchModel()
@@ -126,6 +145,7 @@ struct MenuBarDownloadsView: View {
             footer
         }
         .frame(width: 300)
+        .background(Color(nsColor: .windowBackgroundColor))
         .task {
             model.start()
             if freeSpace == nil { freeSpace = Self.freeDiskSpace() }
@@ -144,7 +164,6 @@ struct MenuBarDownloadsView: View {
                 .onSubmit { search.openFirst() }
             if search.searching { ProgressView().controlSize(.mini) }
         }.padding(.horizontal, 12).padding(.vertical, 9)
-            .background(Color(nsColor: .controlBackgroundColor))
     }
 
     @ViewBuilder private var searchResults: some View {
@@ -163,9 +182,8 @@ struct MenuBarDownloadsView: View {
                             Text(hit.name)
                                 .lineLimit(1).truncationMode(.middle)
                             Spacer()
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 5)
+                        }
+                    }.buttonStyle(MenuRowStyle())
                         .contextMenu {
                             Button("Show in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([hit.url])
@@ -196,9 +214,8 @@ struct MenuBarDownloadsView: View {
                                 .lineLimit(1).truncationMode(.middle)
                         }
                         Spacer()
-                    }.contentShape(Rectangle())
-                }.buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    }
+                }.buttonStyle(MenuRowStyle())
                 Divider()
             }
             if let freeSpace {
@@ -220,12 +237,12 @@ struct MenuBarDownloadsView: View {
                 QuickSearchController.shared.toggle()
                 Self.closeMenu()
             }
-            Divider().padding(.leading, 28)
+            Divider().padding(.leading, 12)
             footerButton("Open Downloads Folder") {
                 URL(fileURLWithPath: NSHomeDirectory() + "/Downloads").openInWorkspace()
                 Self.closeMenu()
             }
-            Divider().padding(.leading, 28)
+            Divider().padding(.leading, 12)
             footerButton(
                 updates.offers.isEmpty ? "Check for Updates"
                     : "Check for Updates (\(updates.offers.count))",
@@ -246,13 +263,12 @@ struct MenuBarDownloadsView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Text(title).foregroundStyle(highlight ? Color.accentColor : Color.primary)
+                Text(title)
                 if let hint {
                     Text(hint).font(.caption2).foregroundStyle(.tertiary)
                 }
                 Spacer()
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            }
+        }.buttonStyle(MenuRowStyle(tint: highlight ? .accentColor : .primary))
     }
 }
