@@ -27,9 +27,14 @@ struct DuplicateFile: Identifiable, Sendable {
     var id: String { hit.path }
 }
 
-/// All scanning runs off the main actor: nonisolated async functions execute
-/// on the concurrent executor.
+/// All scanning runs away from the main thread, with hard caps so a big
+/// library cannot turn into an endless scan.
 enum DuplicateScanner {
+    /// Images that get dimension checks (most recent first); the Vision stage
+    /// then works on at most `maxVisionImages` of them.
+    static let maxDimensionScan = 4000
+    static let maxVisionImages = 2000
+
     static func find(
         in files: [Hit], progress: @escaping @Sendable (String) -> Void
     ) async throws -> [DuplicateGroup] {
@@ -46,12 +51,14 @@ enum DuplicateScanner {
             if index % 8 == 0 { progress("Hashing size groups (\(index)/\(sizeGroups.count))…") }
             var byHead: [String: [Hit]] = [:]
             for hit in sameSize {
+                try Task.checkCancellation()
                 let key = quickHash(hit.url, size: hit.size)
                 byHead[key, default: []].append(hit)
             }
             for probable in byHead.values where probable.count > 1 {
                 for hit in probable {
-                    confirmed[fullHash(hit.url), default: []].append(hit)
+                    try Task.checkCancellation()
+                    confirmed[try fullHash(hit.url), default: []].append(hit)
                 }
             }
         }
@@ -67,8 +74,11 @@ enum DuplicateScanner {
 
         // Look-alike photos: images sharing pixel dimensions, clustered by
         // Vision feature-print distance (byte-identical pairs covered above).
-        let images = candidates.filter { $0.isImageFile && $0.size < 50_000_000 }
         progress("Reading image dimensions…")
+        let images = candidates
+            .filter { $0.isImageFile && $0.size < 50_000_000 }
+            .sorted { $0.mtime > $1.mtime }
+            .prefix(maxDimensionScan)
         var byDimension: [String: [Hit]] = [:]
         var dimensions: [String: CGSize] = [:]
         for hit in images {
@@ -78,12 +88,18 @@ enum DuplicateScanner {
                 dimensions[hit.path] = size
             }
         }
-        for (_, sameShape) in byDimension.sorted(by: { $0.value.count > $1.value.count })
-        where sameShape.count > 1 && sameShape.count <= 60
-        {
+        // Only the biggest clusters go through Vision, and together they
+        // never exceed maxVisionImages — feature prints are expensive.
+        var visionBudget = maxVisionImages
+        let clustersByCount = byDimension.values
+            .filter { $0.count > 1 && $0.count <= 60 }
+            .sorted { $0.count > $1.count }
+        for sameShape in clustersByCount {
             try Task.checkCancellation()
+            guard sameShape.count <= visionBudget else { continue }
+            visionBudget -= sameShape.count
             progress("Comparing \(sameShape.count) similar-shaped photos…")
-            guard let clusters = similarClusters(sameShape) else { continue }
+            guard let clusters = try similarClusters(sameShape) else { continue }
             for members in clusters {
                 let fresh = members.filter { !alreadyGrouped.contains($0.path) }
                 guard fresh.count > 1 else { continue }
@@ -120,11 +136,15 @@ enum DuplicateScanner {
         return SHA256.hash(data: head + tail).description
     }
 
-    static func fullHash(_ url: URL) -> String {
+    static func fullHash(_ url: URL) throws -> String {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return UUID().uuidString }
         defer { try? handle.close() }
         var hasher = SHA256()
-        while let chunk = try? handle.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty {
+        while true {
+            try Task.checkCancellation()
+            guard let chunk = try handle.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty else {
+                break
+            }
             hasher.update(data: chunk)
         }
         return hasher.finalize().description
@@ -143,7 +163,7 @@ enum DuplicateScanner {
 
     /// Greedy clustering by feature-print distance; returns nil when Vision
     /// is unavailable for the batch.
-    static func similarClusters(_ hits: [Hit]) -> [[Hit]]? {
+    static func similarClusters(_ hits: [Hit]) throws -> [[Hit]]? {
         var prints: [String: VNFeaturePrintObservation] = [:]
         for hit in hits {
             let request = VNGenerateImageFeaturePrintRequest()
@@ -163,6 +183,7 @@ enum DuplicateScanner {
             return current
         }
         for left in hits {
+            try Task.checkCancellation()
             guard let leftPrint = prints[left.path] else { continue }
             for right in hits where left.path < right.path {
                 guard let rightPrint = prints[right.path] else { continue }
@@ -187,6 +208,7 @@ enum DuplicateScanner {
     @Published var scopeLabel = "This Mac"
     @Published var trashed = 0
     private var generation = 0
+    private var scanTask: Task<Void, Never>?
 
     var totalReclaimable: UInt64 { groups.reduce(0) { $0 + $1.reclaimable } }
 
@@ -197,18 +219,30 @@ enum DuplicateScanner {
         scanning = true
         groups = []
         progress = "Listing files…"
-        Task {
+        scanTask?.cancel()
+        scanTask = Task {
             do {
                 let reply = try await HomyServices.shared.engine.request([
                     "q": "kind:file in:" + scope.path, "limit": 20000,
                 ])
                 guard revision == generation else { return }
                 guard reply.ok else { throw Engine.Failure.message(reply.error ?? "Search failed") }
-                let found = try await DuplicateScanner.find(in: reply.hits ?? []) { text in
-                    Task { @MainActor in
-                        guard revision == self.generation else { return }
+                // Hashing and Vision comparisons run detached: they must never
+                // occupy the main actor, whatever the caller's executor is.
+                let files = reply.hits ?? []
+                let report: @Sendable (String) -> Void = { text in
+                    Task { @MainActor [weak self] in
+                        guard let self, revision == self.generation else { return }
                         self.progress = text
                     }
+                }
+                let scan = Task.detached(priority: .userInitiated) {
+                    try await DuplicateScanner.find(in: files, progress: report)
+                }
+                let found = try await withTaskCancellationHandler {
+                    try await scan.value
+                } onCancel: {
+                    scan.cancel()
                 }
                 guard revision == generation else { return }
                 groups = found
@@ -228,6 +262,7 @@ enum DuplicateScanner {
 
     func stop() {
         generation += 1
+        scanTask?.cancel()
         scanning = false
         progress = nil
     }
@@ -291,7 +326,9 @@ struct DuplicatesView: View {
             Divider()
             if !data.groups.isEmpty && !data.scanning {
                 ScrollView {
-                    VStack(spacing: 14) {
+                    // Lazy: a home library can yield hundreds of groups; an
+                    // eager VStack would build every card on the main thread.
+                    LazyVStack(spacing: 14) {
                         ForEach($data.groups) { $group in
                             DuplicateGroupCard(group: $group, data: data, model: model)
                         }

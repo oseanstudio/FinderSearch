@@ -206,7 +206,8 @@ struct CleanupCardView: View {
             }
             if expanded.contains(card.id) {
                 Divider()
-                ForEach(card.files) { hit in
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(card.files) { hit in
                     HStack(spacing: 10) {
                         Image(systemName: selection.contains(hit.path) ? "checkmark.square" : "square")
                             .foregroundStyle(.secondary)
@@ -229,6 +230,7 @@ struct CleanupCardView: View {
                                 NSWorkspace.shared.activateFileViewerSelecting([hit.url])
                             }
                         }
+                    }
                 }
                 if !selection.isEmpty {
                     HStack {

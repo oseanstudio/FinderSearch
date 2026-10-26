@@ -70,6 +70,11 @@ enum WhereFroms {
 struct DownloadSourceGroup: Identifiable {
     let source: String
     var files: [Hit]
+    /// Shelves render eagerly inside a horizontal strip, so cap the cards
+    /// and note the remainder.
+    static let shownPerSource = 40
+    var visibleFiles: [Hit] { Array(files.prefix(Self.shownPerSource)) }
+    var hiddenCount: Int { max(0, files.count - Self.shownPerSource) }
     var id: String { source }
     var totalSize: UInt64 { files.reduce(0) { $0 + $1.size } }
 }
@@ -186,8 +191,13 @@ struct DownloadedFromView: View {
                         }
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                ForEach(group.files) { hit in
+                                ForEach(group.visibleFiles) { hit in
                                     HomyFileCard(hit: hit)
+                                }
+                                if group.hiddenCount > 0 {
+                                    Text("+\(group.hiddenCount) more")
+                                        .font(.callout).foregroundStyle(.secondary)
+                                        .frame(width: 90)
                                 }
                             }.padding(.vertical, 2)
                         }
