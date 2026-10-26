@@ -587,6 +587,7 @@ enum FileIconSize: Int, Sendable {
     case row = 32
     case compact = 128
     case preview = 256
+    case large = 512  // HOMY: the icon slider's 256 pt top end on 2× screens
 }
 
 final class FileIcons: @unchecked Sendable {

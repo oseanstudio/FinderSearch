@@ -19,16 +19,20 @@ struct QuickLookBrowser: View {
                         Image(systemName: "chevron.right")
                     }
                     .disabled(!model.canAdvancePreview(1)).help("Next file")
-                    Text(hit.name).font(.headline).lineLimit(1)
+                Text(hit.name).font(.headline).lineLimit(1)
+                    .help(hit.path)
                     Spacer()
-                    Text(model.previewPosition).foregroundStyle(.secondary).monospacedDigit()
-                    Button("Open") {
-                        model.open(hit); model.preview = nil
-                    }
-                    Button("Done") { model.preview = nil }.keyboardShortcut(.cancelAction)
-                }.padding()
-                Divider()
-                QuickLook(url: hit.url).frame(minWidth: 650, minHeight: 470)
+                Text("scroll zooms · drag pans · double-click fits")
+                    .font(.caption2).foregroundStyle(.tertiary)  // HOMY
+                Text(model.previewPosition).foregroundStyle(.secondary).monospacedDigit()
+                Button("Open") {
+                    model.open(hit); model.preview = nil
+                }
+                Button("Done") { model.preview = nil }
+            }.padding()
+            Divider()
+            // HOMY: zoomable, pannable preview in its own resizable window.
+            ZoomablePreview(url: hit.url).frame(minWidth: 500, minHeight: 340)
             }
         }
         .onAppear {
@@ -45,7 +49,9 @@ struct QuickLookBrowser: View {
                 if event.keyCode == 124 || event.keyCode == 125 {
                     model.advancePreview(1); return nil
                 }
-                if event.keyCode == 49 { model.preview = nil; return nil }
+                if event.keyCode == 49 || event.keyCode == 53 {  // HOMY: 53 = Esc, no sheet now
+                    model.preview = nil; return nil
+                }
                 return event
             }
         }

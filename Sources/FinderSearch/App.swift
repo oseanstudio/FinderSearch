@@ -182,8 +182,7 @@ struct BrowserView: View {
                     .modifier(SafeBackgroundDropTarget(model: model))
                     .focusable(model.viewMode == .icons || model.viewMode == .gallery)
                     .focused($keyboardFocus, equals: .files).focusEffectDisabled()
-                pathBar
-                statusBar
+                bottomBar  // HOMY: path + status in a single row
             }
             .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
             .toolbar {
@@ -318,11 +317,12 @@ struct BrowserView: View {
         .sheet(item: $model.batchRename) { request in
             BatchRenameSheet(model: model, request: request)
         }
-        .sheet(
-            isPresented: Binding(
-                get: { model.preview != nil }, set: { if !$0 { model.preview = nil } })
-        ) {
-            QuickLookBrowser(model: model)
+        .onChange(of: model.preview) { _, hit in  // HOMY: Quick Look in its own resizable window
+            if hit != nil {
+                QuickLookWindowController.shared.present(model)
+            } else if QuickLookWindowController.shared.shows(model) {
+                QuickLookWindowController.shared.dismiss()
+            }
         }
     }
     private func installKeyMonitor() {
@@ -466,43 +466,94 @@ struct BrowserView: View {
             model: model, focusFiles: focusFiles, newTab: { workspace.newTab($0) },
             addFavorite: { workspace.addFavorite($0) })
     }
-    private var pathBar: some View {
+    // HOMY: one bottom row — breadcrumbs on the left, the item count and the
+    // icon-size slider together on the right (upstream stacked two rows).
+    private var bottomBar: some View {
         VStack(spacing: 0) {
-            Divider();
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    if !model.isSearch,
-                        model.route == "recents" || model.route.hasPrefix("tag:")
-                            || HomyRoute(model.route) != nil  // HOMY
-                    {
-                        Label(
-                            model.title,
-                            systemImage:
-                                model.route == "recents"
-                                ? "clock" : model.route.hasPrefix("tag:")
-                                    ? "tag" : HomyRoute(model.route)?.symbol ?? "house")  // HOMY
-                    } else {
-                        ForEach(model.ancestors, id: \.path) { url in
-                            Button {
-                                model.navigate(url)
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(
-                                        systemName: url.path == "/"
-                                            ? "internaldrive" : "folder.fill"
-                                    ).font(.system(size: 11));
-                                    Text(url.path == "/" ? "Macintosh HD" : url.lastPathComponent)
-                                }
-                            }.buttonStyle(.plain)
-                            if url != model.ancestors.last {
-                                Image(systemName: "chevron.right").font(.system(size: 8))
-                                    .foregroundStyle(.tertiary)
+            Divider()
+            HStack(spacing: 10) {
+                if model.loading || model.searching || model.sorting || model.busy {
+                    ProgressView().controlSize(.mini)
+                }
+                if let progress = model.operationProgress {
+                    if let fraction = progress.fraction {
+                        ProgressView(value: fraction).frame(width: 100)
+                    }
+                    Text("\(model.operationName) · \(progress.item)").lineLimit(1)
+                        .truncationMode(.middle)
+                    if progress.bytes > 0 {
+                        Text(
+                            ByteCountFormatter.string(
+                                fromByteCount: progress.bytes, countStyle: .file)
+                        )
+                        .monospacedDigit()
+                    }
+                    Button("Cancel") { model.cancelOperation() }.controlSize(.small)
+                }
+                crumbs
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(model.isSearch ? model.query : model.location.path)
+                Spacer(minLength: 8)
+                statusCluster.fixedSize()
+            }.font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 14)
+                .frame(height: 28)
+                .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
+    private var crumbs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                if !model.isSearch,
+                    model.route == "recents" || model.route.hasPrefix("tag:")
+                        || HomyRoute(model.route) != nil  // HOMY
+                {
+                    Label(
+                        model.title,
+                        systemImage:
+                            model.route == "recents"
+                            ? "clock" : model.route.hasPrefix("tag:")
+                                ? "tag" : HomyRoute(model.route)?.symbol ?? "house")  // HOMY
+                } else {
+                    ForEach(model.ancestors, id: \.path) { url in
+                        Button {
+                            model.navigate(url)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(
+                                    systemName: url.path == "/"
+                                        ? "internaldrive" : "folder.fill"
+                                ).font(.system(size: 11));
+                                Text(url.path == "/" ? "Macintosh HD" : url.lastPathComponent)
                             }
+                        }.buttonStyle(.plain)
+                        if url != model.ancestors.last {
+                            Image(systemName: "chevron.right").font(.system(size: 8))
+                                .foregroundStyle(.tertiary)
                         }
                     }
-                }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 6)
+                }
+            }.padding(.vertical, 6)
+        }
+    }
+
+    /// The count/selection label next to the icon-size slider.
+    private var statusCluster: some View {
+        HStack(spacing: 6) {
+            Text(
+                model.selection.isEmpty
+                    ? (model.isSearch && model.hits.count == 500
+                        ? "First 500 matches" : "\(model.sortedHits.count) items")
+                    : "\(model.selection.count) selected")
+            if model.isSearch { Text(String(format: "· %.1f ms", model.elapsed)).monospacedDigit() }
+            if model.viewMode == .icons {
+                Image(systemName: "square").font(.system(size: 8));
+                // HOMY: 256 max — 96 was too small for photo browsing.
+                Slider(value: $iconSize, in: 40...256).frame(width: 110).accessibilityLabel(
+                    "Icon Size");
+                Image(systemName: "square").font(.system(size: 13))
             }
-        }.background(Color(nsColor: .windowBackgroundColor))
+        }
     }
     // HOMY: toolbar bell for pending updates; the badge counts the repos.
     @ViewBuilder private var updatesBadgeButton: some View {
@@ -524,42 +575,6 @@ struct BrowserView: View {
         }
     }
 
-    private var statusBar: some View {
-        HStack {
-            if model.loading || model.searching || model.sorting || model.busy {
-                ProgressView().controlSize(.mini)
-            }
-            if let progress = model.operationProgress {
-                if let fraction = progress.fraction {
-                    ProgressView(value: fraction).frame(width: 100)
-                }
-                Text("\(model.operationName) · \(progress.item)").lineLimit(1)
-                if progress.bytes > 0 {
-                    Text(
-                        ByteCountFormatter.string(fromByteCount: progress.bytes, countStyle: .file)
-                    )
-                    .monospacedDigit()
-                }
-                Button("Cancel") { model.cancelOperation() }.controlSize(.small)
-            } else {
-                Text(
-                    model.selection.isEmpty
-                        ? (model.isSearch && model.hits.count == 500
-                            ? "First 500 matches" : "\(model.sortedHits.count) items")
-                        : "\(model.selection.count) selected")
-            }
-            if model.isSearch { Text(String(format: "· %.1f ms", model.elapsed)).monospacedDigit() }
-            Spacer()
-            if model.viewMode == .icons {
-                Image(systemName: "square").font(.system(size: 8));
-                Slider(value: $iconSize, in: 40...96).frame(width: 100).accessibilityLabel(
-                    "Icon Size");
-                Image(systemName: "square").font(.system(size: 13))
-            }
-        }.font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 14).frame(
-            height: 28
-        ).background(Color(nsColor: .windowBackgroundColor))
-    }
     @ViewBuilder private var backgroundActions: some View {
         Button("New Folder") { model.newFolder() }.disabled(model.busy || !model.canWriteHere)
         Button("New Text File") { model.newTextFile() }.disabled(model.busy || !model.canWriteHere)

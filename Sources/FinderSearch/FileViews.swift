@@ -57,9 +57,10 @@ struct FileIcon: View {
 }
 
 enum ThumbnailSizing {
-    // Preserve the existing maximum resolution while avoiding oversized filmstrip images.
+    // HOMY: 512 — the icon slider now reaches 256 pt, which is 512 px on a
+    // 2× display.
     static func pixels(points: Double, scale: Double) -> Int {
-        Int(min(256, max(1, ceil(points * scale))))
+        Int(min(512, max(1, ceil(points * scale))))
     }
 }
 
@@ -69,7 +70,10 @@ struct FileThumbnail: View {
     @Environment(\.displayScale) private var displayScale
     @State private var image: NSImage?
     private var pixels: Int { ThumbnailSizing.pixels(points: size, scale: displayScale) }
-    private var iconSize: FileIconSize { pixels <= 128 ? .compact : .preview }
+    // HOMY: .large keeps icons sharp past 256 px.
+    private var iconSize: FileIconSize {
+        pixels <= 128 ? .compact : pixels <= 256 ? .preview : .large
+    }
     var body: some View {
         Image(
             nsImage: image ?? FileIcons.shared.placeholder(hit, size: iconSize)

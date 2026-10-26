@@ -60,6 +60,7 @@ two-line fix; everything else merges untouched.
 | **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Homy menu, toolbar bell |
 | Menu-bar list of latest downloads | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
+| Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
 | Sidebar order: Favorites above/below Categories | `Sidebar.swift` | Homy menu toggle |
 | Shortcuts actions (Find Files, Get Latest Download, Search in Homy) | `HomyIntents.swift` | Shortcuts.app |
 | Trash-first deletion everywhere | upstream + our tools | ⌫ |
