@@ -238,13 +238,7 @@ struct HomeDashboard: View {
                 Button("Open") { model.sidebar("col:" + shelf.id.uuidString) }
                     .controlSize(.small)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(shelf.files) { hit in
-                        HomyFileCard(hit: hit)
-                    }
-                }.padding(.vertical, 2)
-            }
+            ShelfStrip(files: shelf.files)
         }
     }
 
@@ -257,13 +251,7 @@ struct HomeDashboard: View {
                 Button("See All") { model.sidebar("cat:" + shelf.category.rawValue) }
                     .controlSize(.small)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(shelf.files) { hit in
-                        HomyFileCard(hit: hit)
-                    }
-                }.padding(.vertical, 2)
-            }
+            ShelfStrip(files: shelf.files)
         }
     }
 }
@@ -311,4 +299,100 @@ struct HomyFileCard: View {
 
 extension URL {
     func openInWorkspace() { _ = NSWorkspace.shared.open(self) }
+}
+
+
+/// HOMY: a full-bleed horizontal shelf with Finder-style arrows. The strip
+/// runs edge to edge; the chevrons step one card per click and auto-repeat
+/// while held down.
+struct ShelfStrip: View {
+    let files: [Hit]
+    @State private var offset = 0
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ZStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Array(files.enumerated()), id: \.offset) { index, hit in
+                            HomyFileCard(hit: hit)
+                                .id(index)
+                        }
+                    }
+                    .padding(.leading, 24)
+                    .padding(.trailing, 24)
+                    .padding(.vertical, 2)
+                }
+                // Bleed to the window edges: the dashboard pads its content
+                // by 24, so the strip cancels it and re-pads inside.
+                .padding(.horizontal, -24)
+                HStack {
+                    if offset > 0 {
+                        ShelfArrow(system: "chevron.left") {
+                            step(proxy, -1)
+                        }
+                    }
+                    Spacer()
+                    if files.count > 3 {
+                        ShelfArrow(system: "chevron.right") {
+                            step(proxy, 1)
+                        }
+                    }
+                }
+                .padding(.horizontal, 5)
+            }
+            .onAppear {
+                offset = 0
+                proxy.scrollTo(0, anchor: .leading)
+            }
+            .onChange(of: files.count) { _, _ in
+                offset = 0
+                proxy.scrollTo(0, anchor: .leading)
+            }
+        }
+    }
+
+    private func step(_ proxy: ScrollViewProxy, _ delta: Int) {
+        guard !files.isEmpty else { return }
+        offset = min(max(0, offset + delta), files.count - 1)
+        withAnimation(.easeOut(duration: 0.12)) {
+            proxy.scrollTo(offset, anchor: delta > 0 ? .trailing : .leading)
+        }
+    }
+}
+
+/// HOMY: a round chevron that steps on click and keeps stepping while held.
+private struct ShelfArrow: View {
+    let system: String
+    let step: () -> Void
+    @State private var timer: Timer?
+    @State private var pressing = false
+
+    var body: some View {
+        Image(systemName: system)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.primary)
+            .frame(width: 24, height: 24)
+            .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
+            .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+            .scaleEffect(pressing ? 0.88 : 1)
+            .onLongPressGesture(minimumDuration: .infinity, maximumDistance: 40) {
+                // never completes at infinite duration
+            } onPressingChanged: { pressing in
+                self.pressing = pressing
+                timer?.invalidate()
+                timer = nil
+                if pressing {
+                    step()
+                    timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                        step()
+                    }
+                }
+            }
+            .onDisappear {
+                timer?.invalidate()
+                timer = nil
+            }
+    }
 }
