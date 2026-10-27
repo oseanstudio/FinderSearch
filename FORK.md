@@ -59,14 +59,14 @@ two-line fix; everything else merges untouched.
 | Duplicates (identical SHA-256 + look-alike photos) | `Duplicates.swift` | ⇧⌘D |
 | Clean Up (old installers, downloads, screenshots, big videos) | `Cleanup.swift` | ⇧⌘K |
 | Quick Search from any app, Spotlight-style | `QuickSearch.swift` | ⇧⌘Space (global) |
-| **Describe Contents** — semantic search inside files via [DigUp](https://github.com/ARahim3/DigUp) | `DigUpBridge.swift`, `DigUpSemantic.swift` | ⇧⌘F, sidebar |
+| **Search** — semantic search inside files via [DigUp](https://github.com/ARahim3/DigUp) | `DigUpBridge.swift`, `DigUpSemantic.swift` | ⇧⌘F, sidebar |
 | **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Homy menu, toolbar bell |
 | Menu-bar quick search — the menu-bar icon opens a search bar (live results, ↩ opens top hit) plus latest download, free disk space and Quick Search/Updates shortcuts | `MenuBarDownloads.swift` | menu bar |
 | Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
 | Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
 | **Custom collections** — named folder groups ("Work" = ~/Projects + ~/Invoices) as a reorderable sidebar section, Home shelves, searchable like categories; create with the sidebar's New Collection… row, manage via right-click | `CollectionsAndRules.swift` | sidebar |
 | **Custom smart folders** — rule builder (kind, size, age, name contains, downloaded from) persisted alongside the built-ins; edit/delete via right-click | `CollectionsAndRules.swift` | sidebar |
-| **Open at the matched spot** — Describe Contents results open PDFs at the matched page and video/audio at the matched moment in their own window | `SpotPreview.swift` | double-click |
+| **Open at the matched spot** — Search results open PDFs at the matched page and video/audio at the matched moment in their own window | `SpotPreview.swift` | double-click |
 | **Big Folders space map** — per-folder size bars with drill-down inside Clean Up | `SpaceMap.swift` | Clean Up |
 | **Finder-style sidebar customization** — drag a section title and it lifts, follows the cursor with an insertion line, and drops into place; right-click any section, row or built-in (Home, Recents, Categories, Smart Folders, Tags, iCloud…) → Remove from Sidebar; **Customize Sidebar…** (right-click or Hearth menu) restores anything, and Reset starts over. Layout persists. | `Sidebar.swift` | drag / right-click |
 | **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomyCore.swift` | ⌘F |
@@ -81,7 +81,7 @@ Not carried over from Homy: paid licensing/activation (this fork is free,
 MIT), Sparkle-style auto-updates (rebuild with `./scripts/build.sh`), and
 the macOS 26-only multi-file drag stack (the system provides it).
 
-## DigUp integration (Describe Contents)
+## DigUp integration (Search)
 
 [DigUp](https://github.com/ARahim3/DigUp) adds search by what is inside
 files — photo scenes, PDF and document text, what is said in recordings —

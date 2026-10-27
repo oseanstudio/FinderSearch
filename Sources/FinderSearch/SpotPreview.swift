@@ -3,7 +3,7 @@ import AppKit
 import AVKit
 import PDFKit
 
-// HOMY: segment-accurate results for Describe Contents.
+// HOMY: segment-accurate results for the Search route.
 //
 // Thumbnails come from DigUp's render op — the exact matched PDF page or
 // video frame as a JPEG, not the file's generic icon. Opening goes through

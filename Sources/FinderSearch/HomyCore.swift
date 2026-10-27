@@ -137,7 +137,7 @@ enum HomyRoute: Equatable, CaseIterable {
     @MainActor var title: String {
         switch self {
         case .home: return "Home"
-        case .semantic: return "Describe Contents"
+        case .semantic: return "Search"
         case .category(let category): return category.title
         case .smart(let smart): return smart.title
         case .collection(let id):
@@ -238,7 +238,7 @@ extension Hit {
 
 // MARK: - Sidebar sections
 
-/// Home and Describe Contents stay pinned at the top; everything below them
+/// Home and Search stay pinned at the top; everything below them
 /// is a reorderable section (drag a section's title onto another's).
 struct HomyPinnedSections: View {
     let select: (String) -> Void
@@ -255,7 +255,7 @@ struct HomyPinnedSections: View {
         }
         if !layout.isHidden("row:semantic") {
             SidebarItemRow(route: "semantic", selection: selection, onSelect: select) {
-                Label("Describe Contents", systemImage: "text.magnifyingglass")  // DIGUP
+                Label("Search", systemImage: "text.magnifyingglass")  // DIGUP
             } menu: {
                 SidebarRowMenu(itemID: "row:semantic")
             }

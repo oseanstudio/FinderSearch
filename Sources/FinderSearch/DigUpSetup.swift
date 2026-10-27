@@ -279,7 +279,7 @@ struct DigUpSetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Describe Contents", systemImage: "text.magnifyingglass")
+                    Label("Search", systemImage: "text.magnifyingglass")
                         .font(.system(size: 24, weight: .bold))
                     Text(
                         "Search files by what is inside them — photos, PDFs, documents, recordings — "

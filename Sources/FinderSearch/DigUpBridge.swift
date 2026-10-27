@@ -290,7 +290,7 @@ struct DigUpHit: Identifiable, Decodable, Hashable {
 
     private func spawn() throws {
         guard let cli = cliURL else {
-            throw DigUpError("DigUp is not installed. Install it from the Describe Contents page.")
+            throw DigUpError("DigUp is not installed. Install it from the Search page.")
         }
         let process = Process()
         process.executableURL = cli

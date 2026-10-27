@@ -729,7 +729,7 @@ struct CustomizeSidebarSheet: View {
         List {
             Section("Pinned") {
                 toggle("Home", "row:home")
-                toggle("Describe Contents", "row:semantic")
+                toggle("Search", "row:semantic")
                 toggle("Recents", "row:recents")
             }
             ForEach(layout.sections, id: \.self) { section in

@@ -17,7 +17,7 @@ struct HomyCommandMenu: View {
     var body: some View {
         Button("Quick Search") { QuickSearchController.shared.toggle() }
             .keyboardShortcut(.space, modifiers: [.command, .shift])
-        Button("Describe Contents…") { model?.sidebar("semantic") }  // DIGUP
+        Button("Search…") { model?.sidebar("semantic") }  // DIGUP
             .keyboardShortcut("f", modifiers: [.command, .shift])
             .disabled(model?.busy != false)
         Divider()

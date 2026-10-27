@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// DIGUP: the "Describe Contents" route — search files by what is inside them
+// DIGUP: the Search route — find files by what is inside them
 // ("the clause about pets in the lease", "zebra in a video"), powered by
 // DigUp's on-device index.
 
@@ -259,9 +259,15 @@ struct SemanticSearchView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
+            if indexing.running {
+                ProgressView().controlSize(.mini)
+            }
             Image(systemName: "internaldrive").font(.system(size: 10))
-            Text(serviceSummary).font(.caption).foregroundStyle(.secondary)
-            Spacer()
+            Text(serviceSummary).lineLimit(1).truncationMode(.middle)
+            if search.query.trimmingCharacters(in: .whitespaces).count >= 2 {
+                Text("· \(search.hits.count) results").monospacedDigit()
+            }
+            Spacer(minLength: 8)
             Button("Sync Now") {
                 indexing.syncNow(roots: DigUpService.effectiveRoots())
             }.controlSize(.small)
@@ -271,7 +277,12 @@ struct SemanticSearchView: View {
                 Image(systemName: "exclamationmark.triangle")
                     .help(error).foregroundStyle(.orange)
             }
-        }.padding(.horizontal, 14).padding(.vertical, 6)
+        }
+        // HOMY: this is the route's single bottom row (the shared bar is
+        // hidden here), so it carries the same height and treatment.
+        .font(.system(size: 11)).foregroundStyle(.secondary)
+        .padding(.horizontal, 14).frame(height: 28)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var serviceSummary: String {

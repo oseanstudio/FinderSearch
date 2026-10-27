@@ -188,7 +188,12 @@ struct BrowserView: View {
                     .modifier(SafeBackgroundDropTarget(model: model))
                     .focusable(model.viewMode == .icons || model.viewMode == .gallery)
                     .focused($keyboardFocus, equals: .files).focusEffectDisabled()
-                bottomBar  // HOMY: path + status in a single row
+                // HOMY: the Search route has its own single bottom row (its
+                // status plus actions); the shared bar's crumbs, item count
+                // and icon slider mean nothing there.
+                if HomyRoute(model.route) != .semantic {
+                    bottomBar
+                }
             }
             .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
             .toolbar {
