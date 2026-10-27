@@ -693,9 +693,12 @@ struct UpdatesSheet: View {
                             }
                         }
                     }
-                    if center.lastChecked != nil {
-                        Text("Checked \(center.lastChecked!, style: .relative) ago")
+                    if let lastChecked = center.lastChecked {
+                        // A static timestamp: the .relative style re-renders
+                        // every second, which reads as a ticking timer.
+                        Text("Last checked \(lastChecked.formatted(date: .omitted, time: .shortened))")
                             .font(.caption2).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }.padding(14)
             }
