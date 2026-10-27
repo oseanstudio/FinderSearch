@@ -205,7 +205,7 @@ struct HomeDashboard: View {
                 "Duplicates", "square.on.square", "Identical files and look-alike photos"
             ) { model.sidebar("dupes") }
             toolCard(
-                "Downloaded From", "globe.desk", "Group downloads by where they came from"
+                "Downloads", "globe.desk", "Grouped by source"
             ) { model.sidebar("sources") }
         }
     }
