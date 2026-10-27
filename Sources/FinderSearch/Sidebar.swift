@@ -398,6 +398,11 @@ struct BrowserSidebar: View, Equatable {
     let openInNewTab: (URL) -> Void
     let addFavoriteFolders: ([URL]) async -> Bool
     @State private var folderDropTargeted = false
+    // HOME: the sidebar's own titlebar allowance. The backing scroll view's
+    // content insets are SwiftUI-managed and flip between zero and the
+    // titlebar height depending on window state, so the column measures the
+    // safe area here and pads its content explicitly instead.
+    @State private var titlebarInset: CGFloat = 52
     let eject: (MountedVolume) -> Void
     private let home = NSHomeDirectory()
 
@@ -426,6 +431,13 @@ struct BrowserSidebar: View, Equatable {
             }
         }
         .navigationSplitViewColumnWidth(min: 170, ideal: 208, max: 280)
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { titlebarInset = geo.safeAreaInsets.top }
+                    .onChange(of: geo.safeAreaInsets.top) { _, top in titlebarInset = top }
+            }
+        )
     }
 
     private var locations: some View {
@@ -446,13 +458,13 @@ struct BrowserSidebar: View, Equatable {
                     sectionRows(section)
                 }
             }
-            .padding(.vertical, 8).padding(.horizontal, 10)
+            // HOME: explicit titlebar allowance — see BrowserSidebar.titlebarInset.
+            .padding(.top, titlebarInset + 8).padding(.bottom, 8).padding(.horizontal, 10)
         }
-        // HOME: the split view places this column below the titlebar, but the
-        // backing scroll view also applies its own automatic glass inset — a
-        // double titlebar inset that left ~66pt of blank above the first row.
-        // Extending under the glass (like Finder's sidebar) removes the double
-        // count; the 8pt content padding keeps rows clear of it.
+        // HOME: the column extends under the titlebar glass like Finder's
+        // sidebar; the content's own padding above keeps the first row clear
+        // of the traffic lights no matter what inset state the backing scroll
+        // view settles in.
         .ignoresSafeArea(.container, edges: .top)
         .onDrop(of: [UTType.fileURL], isTargeted: $folderDropTargeted) { providers in
             FavoriteFolderDrop.perform(providers, add: addFavoriteFolders)
