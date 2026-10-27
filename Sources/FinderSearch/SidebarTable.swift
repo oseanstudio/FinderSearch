@@ -312,6 +312,13 @@ final class SidebarNSTableView: NSTableView {
     override var allowsVibrancy: Bool { true }
     weak var coordinator: SidebarTableCoordinator?
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = row(at: NSPoint(x: 0, y: convert(event.locationInWindow, from: nil).y))
+        let menu = super.menu(for: event)
+        NSLog("HEARTHMENU menu(for event) row=\(row) items=\(menu?.items.count ?? -1)")
+        return menu
+    }
+
 }
 
 @MainActor final class SidebarTableCoordinator: NSObject {
@@ -670,7 +677,7 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
 
     // MARK: drag source
 
-    func tableView(_ tableView: NSTableView, pasteboardWriterForRowAt row: Int) -> NSPasteboardWriting? {
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
         NSLog("HEARTHSIDE writer row=\(row)")
         guard let entry = entry(at: row) else { return nil }
         switch entry {
@@ -988,6 +995,11 @@ final class SidebarItemCell: NSTableCellView {
 
     /// Action rows ("New Collection…") aren't selectable; a click runs them.
     override func mouseDown(with event: NSEvent) {
+        NSLog("HEARTHHIT cell mouseDown configuredRow=\(row)")
+        if let coordinator, let table = coordinator.scroll?.documentView as? NSTableView {
+            let local = table.convert(event.locationInWindow, from: nil)
+            NSLog("HEARTHHIT table row(at:) = \(table.row(at: NSPoint(x: 0, y: local.y))), cellRow=\(row)")
+        }
         if let coordinator, case .item(let item) = coordinator.entry(at: row),
             item.run != nil, item.route == nil
         {

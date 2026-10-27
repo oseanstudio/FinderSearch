@@ -152,7 +152,7 @@ extension SidebarDropTests {
         var sawFavorite = false
         var sawHeader = false
         for row in 0..<coordinator.entries.count {
-            let writer = coordinator.tableView(table, pasteboardWriterForRowAt: row)
+            let writer = coordinator.tableView(table, pasteboardWriterForRow: row)
             switch coordinator.entries[row] {
             case .header:
                 sawHeader = true
