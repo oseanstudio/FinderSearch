@@ -60,14 +60,12 @@ enum FavoriteFolders {
 /// section title to move it), and anything — sections or built-in rows — can
 /// be hidden from the sidebar and restored via Customize Sidebar.
 enum SidebarSection: String, CaseIterable, Hashable, Codable {
-    case categories, smartFolders, collections, savedSearches, favorites, locations, tags
+    case categories, smartFolders, favorites, locations, tags
 
     var title: String {
         switch self {
         case .categories: return "Categories"
         case .smartFolders: return "Smart Folders"
-        case .collections: return "Collections"
-        case .savedSearches: return "Saved Searches"
         case .favorites: return "Favorites"
         case .locations: return "Locations"
         case .tags: return "Tags"
@@ -313,7 +311,7 @@ struct CustomizeSidebarSheet: View {
             ForEach(SidebarTags.values, id: \.0) { name, _ in
                 toggle(name, "row:tag:" + name)
             }
-        case .favorites, .collections, .savedSearches:
+        case .favorites:
             EmptyView()
         }
     }

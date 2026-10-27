@@ -142,43 +142,6 @@ struct SidebarTableActions {
                 run: { NotificationCenter.default.post(name: .homeEditSmartRule, object: nil) })))
             return entries
 
-        case .collections:
-            let collections = HomeCollections.shared.items
-            var entries = layout.orderedIDs(
-                section: section, current: collections.map { "col:" + $0.id.uuidString }
-            ).compactMap { id -> SidebarEntry? in
-                guard let collection = collections.first(where: {
-                    "col:" + $0.id.uuidString == id
-                }) else { return nil }
-                return .item(SidebarItem(
-                    id: id, section: section, route: id, title: collection.name,
-                    symbol: "square.stack.3d.up", kind: .collection(collection)))
-            }
-            entries.append(.item(SidebarItem(
-                id: "action:newCollection", section: section, route: nil,
-                title: "New Collection…", symbol: "plus", kind: .newCollection, run: {
-                    if let name = HomeCollections.promptName(title: "New Collection") {
-                        let collection = HomeCollections.shared.add(name: name)
-                        HomeCollections.addFoldersPanel(to: collection.id)
-                    }
-                })))
-            return entries
-
-        case .savedSearches:
-            let saved = SavedSearches.shared
-            guard !saved.entries.isEmpty else { return [] }
-            return layout.orderedIDs(
-                section: section, current: saved.entries.map { "search:" + $0.id.uuidString }
-            ).compactMap { id -> SidebarEntry? in
-                guard let entry = saved.entries.first(where: {
-                    "search:" + $0.id.uuidString == id
-                }) else { return nil }
-                return .item(SidebarItem(
-                    id: id, section: section, route: nil, title: entry.name,
-                    symbol: "magnifyingglass", kind: .savedSearch(entry),
-                    run: { saved.run(entry, select: actions.select) }))
-            }
-
         case .favorites:
             return layout.orderedIDs(section: section, current: state.favorites)
                 .compactMap { path -> SidebarEntry? in
@@ -261,6 +224,8 @@ struct SidebarTableView: NSViewRepresentable {
         table.focusRingType = .none
         table.allowsTypeSelect = true
         table.draggingDestinationFeedbackStyle = .gap
+        // Section headers scroll away with their sections; no pinning.
+        table.floatsGroupRows = false
         table.setDraggingSourceOperationMask(.move, forLocal: true)
         table.registerForDraggedTypes([.fileURL, .sidebarItem, .sidebarSection])
         table.allowsEmptySelection = true
