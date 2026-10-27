@@ -347,6 +347,7 @@ final class SidebarNSTableView: NSTableView {
         syncSelection(table: table)
     }
 
+
     // MARK: selection
 
     func entry(at row: Int) -> SidebarEntry? {
@@ -399,6 +400,7 @@ final class SidebarNSTableView: NSTableView {
     // MARK: context menus
 
     func menu(for row: Int) -> NSMenu? {
+        NSLog("HEARTHSIDE menu(for:\(row)) entries=\(entries.count) state=\(state != nil)")
         guard let entry = entry(at: row), let state else { return nil }
         switch entry {
         case .header(let section):
@@ -646,6 +648,7 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        NSLog("HEARTHSIDE selectionDidChange row=\((notification.object as? NSTableView)?.selectedRow ?? -1)")
         guard let table = notification.object as? NSTableView, table === scroll?.documentView
         else { return }
         let row = table.selectedRow
@@ -668,6 +671,7 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     // MARK: drag source
 
     func tableView(_ tableView: NSTableView, pasteboardWriterForRowAt row: Int) -> NSPasteboardWriting? {
+        NSLog("HEARTHSIDE writer row=\(row)")
         guard let entry = entry(at: row) else { return nil }
         switch entry {
         case .header(let section):
@@ -691,26 +695,32 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation)
         -> NSDragOperation
     {
+        NSLog("HEARTHSIDE validateDrop row=\(row) op=\(dropOperation.rawValue) types=\(info.draggingPasteboard.types ?? [])")
         // External file drops land anywhere and become favorites.
         if info.draggingPasteboard.types?.contains(NSPasteboard.PasteboardType.fileURL) == true {
             tableView.setDropRow(entries.count, dropOperation: .above)
             return .copy
         }
-        guard dropOperation == .above, (info.draggingSource as? NSTableView) === tableView,
+        guard (info.draggingSource as? NSTableView) === tableView,
             let payload = dragPayload(info)
         else { return [] }
         // Cross-section item drops are invalid; only headers move sections.
+        let valid: Bool
         switch payload {
         case .section:
-            return .move
+            valid = true
         case .item(_, let sourceSection):
-            return Self.section(forInsertionAtRow: row, entries: entries) == sourceSection
-                ? .move : []
+            valid = Self.section(forInsertionAtRow: row, entries: entries) == sourceSection
         }
+        guard valid else { return [] }
+        // AppKit proposes .on by default; reorder always inserts between rows.
+        tableView.setDropRow(row, dropOperation: .above)
+        return .move
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool
     {
+        NSLog("HEARTHSIDE acceptDrop row=\(row)")
         // External file drops anywhere in the sidebar become favorites.
         if info.draggingPasteboard.types?.contains(NSPasteboard.PasteboardType.fileURL) == true {
             var urls: [URL] = []
