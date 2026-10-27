@@ -243,83 +243,96 @@ extension Hit {
 struct HomyPinnedSections: View {
     let select: (String) -> Void
     let layout: SidebarLayout
+    let selection: String?
 
     var body: some View {
         if !layout.isHidden("row:home") {
-            Label("Home", systemImage: "house.fill").tag("home")
-                .contextMenu { SidebarRowMenu(itemID: "row:home") }
+            SidebarItemRow(route: "home", selection: selection, onSelect: select) {
+                Label("Home", systemImage: "house.fill")
+            } menu: {
+                SidebarRowMenu(itemID: "row:home")
+            }
         }
         if !layout.isHidden("row:semantic") {
-            Label("Describe Contents", systemImage: "text.magnifyingglass").tag("semantic")  // DIGUP
-                .contextMenu { SidebarRowMenu(itemID: "row:semantic") }
+            SidebarItemRow(route: "semantic", selection: selection, onSelect: select) {
+                Label("Describe Contents", systemImage: "text.magnifyingglass")  // DIGUP
+            } menu: {
+                SidebarRowMenu(itemID: "row:semantic")
+            }
         }
     }
 }
 
 struct HomyCategorySection: View {
     let layout: SidebarLayout
+    let selection: String?
+    let onSelect: (String) -> Void
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Categories", section: .categories)
             ForEach(HomyCategory.allCases) { category in
                 if !layout.isHidden("row:cat:" + category.rawValue) {
-                    Label(category.title, systemImage: category.symbol)
-                        .tag("cat:" + category.rawValue)
-                        .contextMenu { SidebarRowMenu(itemID: "row:cat:" + category.rawValue) }
+                    SidebarItemRow(
+                        route: "cat:" + category.rawValue, selection: selection,
+                        onSelect: onSelect
+                    ) {
+                        Label(category.title, systemImage: category.symbol)
+                    } menu: {
+                        SidebarRowMenu(itemID: "row:cat:" + category.rawValue)
+                    }
                 }
             }
-        } header: {
-            SidebarSectionHeader(title: "Categories", section: .categories)
         }
     }
 }
 
 struct HomySmartFolderSection: View {
     let layout: SidebarLayout
+    let selection: String?
+    let onSelect: (String) -> Void
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Smart Folders", section: .smartFolders)
             ForEach(HomySmartFolder.allCases) { smart in
                 if !layout.isHidden("row:smart:" + smart.rawValue) {
-                    Label(smart.title, systemImage: smart.symbol)
-                        .tag("smart:" + smart.rawValue)
-                        .contextMenu {
-                            SidebarRowMenu(itemID: "row:smart:" + smart.rawValue)
-                        }
+                    SidebarItemRow(
+                        route: "smart:" + smart.rawValue, selection: selection,
+                        onSelect: onSelect
+                    ) {
+                        Label(smart.title, systemImage: smart.symbol)
+                    } menu: {
+                        SidebarRowMenu(itemID: "row:smart:" + smart.rawValue)
+                    }
                 }
             }
-            HomyUserRulesSection()  // HOMY: user-built smart folders
-        } header: {
-            SidebarSectionHeader(title: "Smart Folders", section: .smartFolders)
+            HomyUserRulesSection(selection: selection, onSelect: onSelect)  // HOMY
         }
     }
 }
 
 struct HomySavedSearchSection: View {
     let select: (String) -> Void
+    let selection: String?
     @ObservedObject private var saved = SavedSearches.shared
 
     var body: some View {
         if !saved.entries.isEmpty {
-            Section {
+            VStack(alignment: .leading, spacing: 0) {
+                SidebarSectionHeader(title: "Saved Searches", section: .savedSearches)
                 ForEach(saved.entries) { entry in
-                    Button {
-                        saved.run(entry, select: select)
-                    } label: {
-                        HStack {
-                            Label(entry.name, systemImage: "magnifyingglass")
-                            Spacer(minLength: 0)
-                        }.contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
+                    SidebarItemRow(
+                        route: "search:" + entry.id.uuidString, selection: selection,
+                        onSelect: { _ in saved.run(entry, select: select) }
+                    ) {
+                        Label(entry.name, systemImage: "magnifyingglass")
+                    } menu: {
                         Button("Run Search") { saved.run(entry, select: select) }
                         Divider()
                         Button("Remove") { saved.remove(entry) }
                     }
                 }
-            } header: {
-                SidebarSectionHeader(title: "Saved Searches", section: .savedSearches)
             }
         }
     }

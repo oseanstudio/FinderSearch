@@ -206,18 +206,23 @@ struct HomySmartRule: Identifiable, Codable, Equatable {
 
 struct HomyCollectionSection: View {
     let select: (String) -> Void
+    let selection: String?
     @ObservedObject private var collections = HomyCollections.shared
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Collections", section: .collections)
             ForEach(collections.items) { collection in
-                Label(collection.name, systemImage: "square.stack.3d.up")
-                    .tag("col:" + collection.id.uuidString)
-                    .contextMenu { collectionActions(collection) }
+                SidebarItemRow(
+                    route: "col:" + collection.id.uuidString, selection: selection,
+                    onSelect: select
+                ) {
+                    Label(collection.name, systemImage: "square.stack.3d.up")
+                } menu: {
+                    collectionActions(collection)
+                }
             }
             newCollectionRow
-        } header: {
-            SidebarSectionHeader(title: "Collections", section: .collections)
         }
     }
 
@@ -234,6 +239,7 @@ struct HomyCollectionSection: View {
                 Spacer(minLength: 0)
             }.contentShape(Rectangle())
         }.buttonStyle(.plain)
+            .padding(.horizontal, 10).padding(.vertical, 4)
     }
 
     @ViewBuilder private func collectionActions(_ collection: HomyCollection) -> some View {
@@ -273,22 +279,27 @@ struct HomyCollectionSection: View {
 /// HOMY: user rules render under the built-in Smart Folders, plus the row
 /// that opens the rule builder.
 struct HomyUserRulesSection: View {
+    let selection: String?
+    let onSelect: (String) -> Void
     @ObservedObject private var rules = HomySmartRules.shared
     @State private var editingRule: HomySmartRule?
     @State private var showBuilder = false
 
     var body: some View {
         ForEach(rules.items) { rule in
-            Label(rule.name, systemImage: "slider.horizontal.3")
-                .tag("rule:" + rule.id.uuidString)
-                .contextMenu {
-                    Button("Edit…") {
-                        editingRule = rule
-                        showBuilder = true
-                    }
-                    Divider()
-                    Button("Delete", role: .destructive) { rules.remove(rule.id) }
+            SidebarItemRow(
+                route: "rule:" + rule.id.uuidString, selection: selection,
+                onSelect: onSelect
+            ) {
+                Label(rule.name, systemImage: "slider.horizontal.3")
+            } menu: {
+                Button("Edit…") {
+                    editingRule = rule
+                    showBuilder = true
                 }
+                Divider()
+                Button("Delete", role: .destructive) { rules.remove(rule.id) }
+            }
         }
         Button {
             editingRule = nil
@@ -299,6 +310,7 @@ struct HomyUserRulesSection: View {
                 Spacer(minLength: 0)
             }.contentShape(Rectangle())
         }.buttonStyle(.plain)
+            .padding(.horizontal, 10).padding(.vertical, 4)
             .sheet(isPresented: $showBuilder) {
                 SmartRuleSheet(rule: editingRule)
             }

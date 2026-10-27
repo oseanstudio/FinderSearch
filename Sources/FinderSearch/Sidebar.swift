@@ -374,8 +374,6 @@ struct BrowserSidebar: View, Equatable {
     let openInNewTab: (URL) -> Void
     let addFavoriteFolders: ([URL]) async -> Bool
     @State private var folderDropTargeted = false
-    @State private var draggingSelection = false  // HOMY: mouse is mid-drag
-    @State private var dragGuardMonitors: [Any] = []
     let eject: (MountedVolume) -> Void
     private let home = NSHomeDirectory()
 
@@ -404,64 +402,28 @@ struct BrowserSidebar: View, Equatable {
             }
         }
         .navigationSplitViewColumnWidth(min: 170, ideal: 208, max: 280)
-        .onAppear { installDragGuard() }  // HOMY
-        .onDisappear { dragGuardMonitors.forEach { NSEvent.removeMonitor($0) } }
-    }
-
-    /// HOMY: a press-drag over sidebar rows must not walk the selection (and
-    /// navigate) underneath the user; only genuine clicks navigate.
-    private func installDragGuard() {
-        guard dragGuardMonitors.isEmpty else { return }
-        dragGuardMonitors = [
-            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { event in
-                Task { @MainActor in draggingSelection = true }
-                return event
-            },
-            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-                Task { @MainActor in draggingSelection = false }
-                return event
-            },
-            NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
-                Task { @MainActor in
-                    draggingSelection = false
-                    // Nudge a re-render so the List's transient drag selection
-                    // snaps back to the real one.
-                    folderDropTargeted.toggle()
-                    folderDropTargeted.toggle()
-                }
-                return event
-            },
-        ]
     }
 
     private var locations: some View {
-        ZStack(alignment: .topLeading) {  // HOMY: hosts the drag overlay
-            List(
-                selection: Binding<String?>(
-                    get: { state.selection },
-                    // HOMY: drags must not walk the selection (and navigate);
-                    // only genuine clicks change the active location.
-                    set: { if let route = $0, !draggingSelection { select(route) } }
-                )
-            ) {
-                HomyPinnedSections(select: select, layout: state.layout)  // HOMY
-                if !state.layout.isHidden("row:recents") {  // HOMY
-                    recentsRow
-                        .contextMenu { SidebarRowMenu(itemID: "row:recents") }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HomyPinnedSections(
+                    select: select, layout: state.layout, selection: state.selection)  // HOMY
+                if !state.layout.isHidden("row:recents") {
+                    SidebarItemRow(
+                        route: "recents", selection: state.selection, onSelect: select
+                    ) {
+                        Label("Recents", systemImage: "clock")
+                    } menu: {
+                        SidebarRowMenu(itemID: "row:recents")
+                    }
                 }
                 // HOMY: drag a section's title to move it; right-click hides.
                 ForEach(state.layout.visibleSections, id: \.self) { section in
                     sectionRows(section)
                 }
-            }
-            SidebarDragOverlay()  // HOMY
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }.padding(.vertical, 8)
         }
-        .background(SidebarSpaceAnchor())  // HOMY: shared drag coordinate space
-        // Recreate the native list after a reorder so selection follows the path,
-        // rather than the previous row index retained by AppKit.
-        .id(state.favorites)
-        .listStyle(.sidebar)
         .onDrop(of: [UTType.fileURL], isTargeted: $folderDropTargeted) { providers in
             FavoriteFolderDrop.perform(providers, add: addFavoriteFolders)
         }
@@ -471,6 +433,11 @@ struct BrowserSidebar: View, Equatable {
                     .padding(4).allowsHitTesting(false)
             }
         }
+        .background(SidebarSpaceAnchor())  // HOMY: shared drag coordinate space
+        .overlay {
+            SidebarDragOverlay()  // HOMY
+                .allowsHitTesting(false)
+        }
     }
 
     // HOMY: content of each reorderable section; right-click hides a whole
@@ -478,10 +445,10 @@ struct BrowserSidebar: View, Equatable {
     @ViewBuilder private func sectionRows(_ section: SidebarSection) -> some View {
         if !state.layout.isHidden("sec:" + section.rawValue) {
             switch section {
-            case .categories: HomyCategorySection(layout: state.layout)
-            case .smartFolders: HomySmartFolderSection(layout: state.layout)
-            case .collections: HomyCollectionSection(select: select)
-            case .savedSearches: HomySavedSearchSection(select: select)
+            case .categories: HomyCategorySection(layout: state.layout, selection: state.selection, onSelect: select)
+            case .smartFolders: HomySmartFolderSection(layout: state.layout, selection: state.selection, onSelect: select)
+            case .collections: HomyCollectionSection(select: select, selection: state.selection)
+            case .savedSearches: HomySavedSearchSection(select: select, selection: state.selection)
             case .favorites: favoritesSection
             case .locations: locationsSection
             case .tags: tagsSection
@@ -502,114 +469,159 @@ struct BrowserSidebar: View, Equatable {
     }
 
     @ViewBuilder private var favoritesSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Favorites", section: .favorites)
             ForEach(state.favorites, id: \.self) { path in
                 let label = FavoriteFolders.label(for: path)
-                row(label.name, label.symbol, path)
-                    .contextMenu {
-                        folderActions(path)
-                        Divider()
-                        Button("Remove from Sidebar") { removeFavorite(path) }
+                SidebarItemRow(route: path, selection: state.selection, onSelect: select) {
+                    Label(label.name, systemImage: label.symbol)
+                } menu: {
+                    folderActions(path)
+                    Divider()
+                    Button("Remove from Sidebar") { removeFavorite(path) }
+                }
+                .background {
+                    FavoriteDragTarget(path: path) { source, target in
+                        guard let from = state.favorites.firstIndex(of: source),
+                            let to = state.favorites.firstIndex(of: target)
+                        else { return }
+                        moveFavorites(IndexSet(integer: from), to > from ? to + 1 : to)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background {
-                        FavoriteDragTarget(path: path) { source, target in
-                            guard let from = state.favorites.firstIndex(of: source),
-                                let to = state.favorites.firstIndex(of: target)
-                            else { return }
-                            moveFavorites(IndexSet(integer: from), to > from ? to + 1 : to)
-                        }
-                    }
+                }
             }
-        } header: {
-            SidebarSectionHeader(title: "Favorites", section: .favorites)
         }
     }
 
     @ViewBuilder private var locationsSection: some View {
-        Section {
-            if !state.layout.isHidden("row:loc:icloud") {  // HOMY
-                row(
-                    "iCloud Drive", "icloud",
-                    home + "/Library/Mobile Documents/com~apple~CloudDocs"
-                ).contextMenu {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Locations", section: .locations)
+            if !state.layout.isHidden("row:loc:icloud") {
+                SidebarItemRow(
+                    route: home + "/Library/Mobile Documents/com~apple~CloudDocs",
+                    selection: state.selection, onSelect: select
+                ) {
+                    Label("iCloud Drive", systemImage: "icloud")
+                } menu: {
                     folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
                     Divider()
                     SidebarRowMenu(itemID: "row:loc:icloud")
                 }
             }
-            if !state.layout.isHidden("row:loc:home") {  // HOMY
-                row((home as NSString).lastPathComponent, "house", home)
-                    .contextMenu {
-                        folderActions(home)
-                        Divider()
-                        SidebarRowMenu(itemID: "row:loc:home")
-                    }
+            if !state.layout.isHidden("row:loc:home") {
+                SidebarItemRow(route: home, selection: state.selection, onSelect: select) {
+                    Label((home as NSString).lastPathComponent, systemImage: "house")
+                } menu: {
+                    folderActions(home)
+                    Divider()
+                    SidebarRowMenu(itemID: "row:loc:home")
+                }
             }
             ForEach(state.volumes) { volume in
-                let ejecting = state.ejectingVolumes.contains(volume.id)
-                let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
-                HStack {
-                    Label(volume.name, systemImage: "externaldrive")
-                    Spacer(minLength: 4)
-                    if volume.canEject {
-                        Button {
-                            eject(volume)
-                        } label: {
-                            Group {
-                                if ejecting {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: "eject.fill").font(.system(size: 11))
-                                        .foregroundStyle(.primary)
-                                }
-                            }.frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(ejecting)
-                        .help(ejectLabel)
-                        .accessibilityLabel(ejectLabel)
-                    }
-                }.tag(volume.id)
-                    .contextMenu {
-                        folderActions(volume.id)
-                        if volume.canEject {
-                            Divider()
-                            Button("Eject “\(volume.name)”") { eject(volume) }
-                                .disabled(ejecting)
-                        }
-                    }
+                volumeRow(volume)
             }
-        } header: {
-            SidebarSectionHeader(title: "Locations", section: .locations)
+        }
+    }
+
+    private func volumeRow(_ volume: MountedVolume) -> some View {
+        let ejecting = state.ejectingVolumes.contains(volume.id)
+        let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
+        return HStack(spacing: 0) {
+            Label(volume.name, systemImage: "externaldrive")
+            Spacer(minLength: 4)
+            if volume.canEject {
+                Button {
+                    eject(volume)
+                } label: {
+                    Group {
+                        if ejecting {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "eject.fill").font(.system(size: 11))
+                                .foregroundStyle(.primary)
+                        }
+                    }.frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .disabled(ejecting)
+                .help(ejectLabel)
+                .accessibilityLabel(ejectLabel)
+            }
+        }
+        .modifier(
+            SidebarRowChrome(selected: state.selection == volume.id) { select(volume.id) })
+        .contextMenu {
+            folderActions(volume.id)
+            if volume.canEject {
+                Divider()
+                Button("Eject “\(volume.name)”") { eject(volume) }
+                    .disabled(ejecting)
+            }
         }
     }
 
     @ViewBuilder private var tagsSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            SidebarSectionHeader(title: "Tags", section: .tags)
             ForEach(SidebarTags.values, id: \.0) { name, color in
-                if !state.layout.isHidden("row:tag:" + name) {  // HOMY
-                    Label {
-                        Text(name)
-                    } icon: {
-                        Image(systemName: "circle.fill").font(.system(size: 10))
-                            .foregroundStyle(color)
-                    }.tag("tag:" + name)
-                        .contextMenu { SidebarRowMenu(itemID: "row:tag:" + name) }
+                if !state.layout.isHidden("row:tag:" + name) {
+                    SidebarItemRow(route: "tag:" + name, selection: state.selection, onSelect: select) {
+                        Label {
+                            Text(name)
+                        } icon: {
+                            Image(systemName: "circle.fill").font(.system(size: 10))
+                                .foregroundStyle(color)
+                        }
+                    } menu: {
+                        SidebarRowMenu(itemID: "row:tag:" + name)
+                    }
                 }
             }
-        } header: {
-            SidebarSectionHeader(title: "Tags", section: .tags)
         }
     }
 
-    private func row(_ name: String, _ symbol: String, _ path: String) -> some View {
-        Label(name, systemImage: symbol).tag(path)
+}
+
+/// HOMY: a sidebar row drawn by hand — hover highlight, selection fill,
+/// tap to navigate. Plain views instead of List rows: no selection machinery
+/// to fight, so drags own their events completely.
+struct SidebarRowChrome: ViewModifier {
+    let selected: Bool
+    let onSelect: () -> Void
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(
+                        selected
+                            ? Color.accentColor.opacity(0.3)
+                            : hovering ? Color.primary.opacity(0.06) : Color.clear))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .onHover { hovering = $0 }
     }
 }
 
+struct SidebarItemRow<Menu: View, LabelContent: View>: View {
+    let route: String
+    let selection: String?
+    let onSelect: (String) -> Void
+    @ViewBuilder let label: () -> LabelContent
+    @ViewBuilder let menu: () -> Menu
 
-/// HOMY: restore anything removed from the sidebar, Finder-style.
+    var body: some View {
+        HStack(spacing: 0) {
+            label()
+            Spacer(minLength: 0)
+        }
+        .modifier(SidebarRowChrome(selected: selection == route) { onSelect(route) })
+        .contextMenu { menu() }
+    }
+}
+
 /// HOMY: standard context menu for hideable built-in sidebar rows.
 struct SidebarRowMenu: View {
     let itemID: String
