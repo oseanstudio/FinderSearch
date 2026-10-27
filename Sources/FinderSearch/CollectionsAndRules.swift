@@ -56,6 +56,17 @@ struct HomeCollection: Identifiable, Codable, Equatable {
         save()
     }
 
+    /// HOME: the shared folder picker used by the sidebar's collection rows.
+    static func addFoldersPanel(to id: UUID) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        HomeCollections.shared.addFolders(panel.urls, to: id)
+    }
+
     func addFolders(_ urls: [URL], to id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         for url in urls {
@@ -204,117 +215,8 @@ struct HomeSmartRule: Identifiable, Codable, Equatable {
 
 // MARK: - Sidebar sections
 
-struct HomeCollectionSection: View {
-    let select: (String) -> Void
-    let selection: String?
-    @ObservedObject private var collections = HomeCollections.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SidebarSectionHeader(title: "Collections", section: .collections)
-            ForEach(collections.items) { collection in
-                SidebarItemRow(
-                    route: "col:" + collection.id.uuidString, selection: selection,
-                    title: collection.name, symbol: "square.stack.3d.up", onSelect: select,
-                    menu: {
-                        collectionActions(collection)
-                    }
-                )
-            }
-            newCollectionRow
-        }
-    }
-
-    private var newCollectionRow: some View {
-        Button {
-            if let name = HomeCollections.promptName(title: "New Collection") {
-                let collection = HomeCollections.shared.add(name: name)
-                addFolders(to: collection.id)
-            }
-        } label: {
-            HStack {
-                Label("New Collection…", systemImage: "plus")
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-    }
-
-    @ViewBuilder private func collectionActions(_ collection: HomeCollection) -> some View {
-        Button("Add Folder…") { addFolders(to: collection.id) }
-        Button("Rename…") {
-            if let name = HomeCollections.promptName(
-                title: "Rename Collection", initial: collection.name)
-            {
-                HomeCollections.shared.rename(collection.id, to: name)
-            }
-        }
-        Divider()
-        ForEach(collection.folders, id: \.self) { path in
-            Button("Remove \(URL(fileURLWithPath: path).lastPathComponent)") {
-                HomeCollections.shared.removeFolder(path, from: collection.id)
-            }.disabled(collection.folders.count <= 1)
-        }
-        if !collection.folders.isEmpty {
-            Divider()
-        }
-        Button("Delete Collection", role: .destructive) {
-            HomeCollections.shared.remove(collection.id)
-        }
-    }
-
-    private func addFolders(to id: UUID) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = true
-        panel.prompt = "Add"
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        HomeCollections.shared.addFolders(panel.urls, to: id)
-    }
-}
-
 /// HOME: user rules render under the built-in Smart Folders, plus the row
 /// that opens the rule builder.
-struct HomeUserRulesSection: View {
-    let selection: String?
-    let onSelect: (String) -> Void
-    @ObservedObject private var rules = HomeSmartRules.shared
-    @State private var editingRule: HomeSmartRule?
-    @State private var showBuilder = false
-
-    var body: some View {
-        ForEach(rules.items) { rule in
-            SidebarItemRow(
-                route: "rule:" + rule.id.uuidString, selection: selection,
-                title: rule.name, symbol: "slider.horizontal.3", onSelect: onSelect,
-                menu: {
-                    Button("Edit…") {
-                        editingRule = rule
-                        showBuilder = true
-                    }
-                    Divider()
-                    Button("Delete", role: .destructive) { rules.remove(rule.id) }
-                }
-            )
-        }
-        Button {
-            editingRule = nil
-            showBuilder = true
-        } label: {
-            HStack {
-                Label("New Smart Folder…", systemImage: "plus").foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .sheet(isPresented: $showBuilder) {
-                SmartRuleSheet(rule: editingRule)
-            }
-    }
-}
-
 // MARK: - Rule builder
 
 struct SmartRuleSheet: View {

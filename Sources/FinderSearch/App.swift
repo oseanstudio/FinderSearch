@@ -141,6 +141,16 @@ struct BrowserView: View {
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
+    // HOME: the toolbar search field's focus bridge (kept as a property so the
+    // body expression stays inside the type-checker's budget).
+    private var searchFocusBinding: Binding<Bool> {
+        Binding(
+            get: { keyboardFocus == .search },
+            set: { keyboardFocus = $0 ? .search : nil })
+    }
+    // HOME: the rule builder, presented from the sidebar's context menu.
+    @State private var editingRule: HomeSmartRule?
+    @State private var showRuleBuilder = false
     @State private var fileNavigationActive = false
     @State private var keyMonitor: Any?
     @State private var browserWindow: NSWindow?
@@ -162,7 +172,6 @@ struct BrowserView: View {
                     fileNavigationActive = false; model.sidebar(route)
                 },
                 removeFavorite: { workspace.removeFavorite($0) },
-                moveFavorites: { workspace.moveFavorites(from: $0, to: $1) },
                 openInNewTab: { workspace.newTab($0) },
                 addFavoriteFolders: { await workspace.addFavoriteFolders($0) },
                 eject: { volume in workspace.eject(volume) { model.error = $0 } }
@@ -257,10 +266,7 @@ struct BrowserView: View {
                 ToolbarItem {
                     ToolbarSearchField(
                         text: $model.query,
-                        focused: Binding(
-                            get: { keyboardFocus == .search },
-                            set: { keyboardFocus = $0 ? .search : nil }
-                        ),
+                        focused: searchFocusBinding,
                         onSubmit: { model.submitSearch() }
                     )
                     .frame(width: 210, height: 24)
@@ -312,6 +318,13 @@ struct BrowserView: View {
         .sheet(isPresented: $showUpdates) {  // HOME
             UpdatesSheet()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .homeEditSmartRule)) { note in  // HOME
+            editingRule = note.object as? HomeSmartRule
+            showRuleBuilder = true
+        }
+        .sheet(isPresented: $showRuleBuilder) {  // HOME
+            SmartRuleSheet(rule: editingRule)
+        }
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
         ) { _ in workspace.refreshVolumes() }
@@ -330,7 +343,7 @@ struct BrowserView: View {
             }
         }
         .onChange(of: keyboardFocus) { _, focus in
-            if focus == .search { fileNavigationActive = false }
+            if focus == KeyboardFocus.search { fileNavigationActive = false }
         }
         .onChange(of: model.query) { _, text in
             if model.isSearch && model.sort != .relevance { model.sort = .relevance }
