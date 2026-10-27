@@ -56,7 +56,7 @@ enum FavoriteFolders {
     }
 }
 
-/// HOMY: sidebar sections. Their order comes from the user's layout (drag a
+/// HOME: sidebar sections. Their order comes from the user's layout (drag a
 /// section title to move it), and anything — sections or built-in rows — can
 /// be hidden from the sidebar and restored via Customize Sidebar.
 enum SidebarSection: String, CaseIterable, Hashable, Codable {
@@ -75,7 +75,7 @@ enum SidebarSection: String, CaseIterable, Hashable, Codable {
     }
 }
 
-/// HOMY: the user's sidebar — section order plus everything they removed.
+/// HOME: the user's sidebar — section order plus everything they removed.
 /// Hidden identifiers are "sec:<section>" or "row:<id>"; missing sections in
 /// a stored order fall back to the default sequence.
 struct SidebarLayout: Codable, Equatable {
@@ -104,9 +104,9 @@ struct SidebarLayout: Codable, Equatable {
         try container.encode(hidden.sorted(), forKey: .hidden)
     }
 
-    static let key = "homy.sidebarLayout"
-    static let changed = Notification.Name("homy.sidebarLayoutChanged")
-    static let customize = Notification.Name("homy.customizeSidebar")
+    static let key = "home.sidebarLayout"
+    static let changed = Notification.Name("home.sidebarLayoutChanged")
+    static let customize = Notification.Name("home.customizeSidebar")
 
     static func load() -> SidebarLayout {
         var layout = SidebarLayout(sections: Array(SidebarSection.allCases), hidden: [])
@@ -150,7 +150,7 @@ struct SidebarLayout: Codable, Equatable {
     }
 }
 
-/// HOMY: Finder-style drag for section titles. An AppKit event catcher under
+/// HOME: Finder-style drag for section titles. An AppKit event catcher under
 /// each title consumes the mouse events before the List's selection machinery
 /// can react, so dragging never changes the active location. Coordinates live
 /// in the reference box's space (anchored to the whole sidebar, y-up).
@@ -205,7 +205,7 @@ struct SidebarLayout: Codable, Equatable {
     }
 }
 
-/// HOMY: an invisible view anchoring the sidebar-wide coordinate space that
+/// HOME: an invisible view anchoring the sidebar-wide coordinate space that
 /// drag events and header frames share.
 final class SidebarReferenceBox: NSView {
     static weak var current: SidebarReferenceBox?
@@ -221,7 +221,7 @@ struct SidebarSpaceAnchor: NSViewRepresentable {
     func updateNSView(_ view: SidebarReferenceBox, context: Context) {}
 }
 
-/// HOMY: consumes the header's mouse events so the List never turns a drag
+/// HOME: consumes the header's mouse events so the List never turns a drag
 /// into a selection change; reports its frame and drives the coordinator.
 final class SidebarDragCatcher: NSView {
     var section: SidebarSection
@@ -310,7 +310,7 @@ struct SidebarSectionHeader: View {
                 .font(.system(size: 7)).foregroundStyle(.tertiary)
         }
         .opacity(isDragged ? 0.35 : 1)
-        // HOMY: the catcher consumes mouse events before the List's selection
+        // HOME: the catcher consumes mouse events before the List's selection
         // machinery can react; right-clicks still reach the context menu.
         .background(SidebarDragHandle(section: section))
         .contextMenu { headerMenu }
@@ -335,7 +335,7 @@ struct SidebarState: Equatable {
     let volumes: [MountedVolume]
     let ejectingVolumes: Set<String>
     let showDiskAccessHint: Bool
-    // HOMY: the user's sidebar layout (dragged sections, hidden items).
+    // HOME: the user's sidebar layout (dragged sections, hidden items).
     let layout: SidebarLayout
 
     @MainActor init(
@@ -349,10 +349,10 @@ struct SidebarState: Equatable {
                 home + "/Library/Mobile Documents/com~apple~CloudDocs",
             ]
             + SidebarTags.values.map { "tag:" + $0.0 }
-            + HomyRoute.sidebarSelectionRoutes  // HOMY
-            + HomyCollections.shared.items.map { "col:" + $0.id.uuidString }  // HOMY
-            + HomySmartRules.shared.items.map { "rule:" + $0.id.uuidString }  // HOMY
-        // HOMY: hidden rows cannot be selected, so an active route inside a
+            + HomeRoute.sidebarSelectionRoutes  // HOME
+            + HomeCollections.shared.items.map { "col:" + $0.id.uuidString }  // HOME
+            + HomeSmartRules.shared.items.map { "rule:" + $0.id.uuidString }  // HOME
+        // HOME: hidden rows cannot be selected, so an active route inside a
         // removed row still selects nothing.
         fixedRoutes = fixedRoutes.filter { !layout.isHidden("row:" + $0) || $0 == route }
         // An ordinary child folder selects no sidebar row. Moving between such
@@ -389,7 +389,7 @@ struct BrowserSidebar: View, Equatable {
             if state.showDiskAccessHint {
                 Divider()
                 Button {
-                    FullDiskAccess.requestEnable()  // HOMY: offers a move when dist-built
+                    FullDiskAccess.requestEnable()  // HOME: offers a move when dist-built
                 } label: {
                     Text("Enable Full Disk Access…")
                         .font(.caption).multilineTextAlignment(.leading)
@@ -407,8 +407,8 @@ struct BrowserSidebar: View, Equatable {
     private var locations: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HomyPinnedSections(
-                    select: select, layout: state.layout, selection: state.selection)  // HOMY
+                HomePinnedSections(
+                    select: select, layout: state.layout, selection: state.selection)  // HOME
                 if !state.layout.isHidden("row:recents") {
                     SidebarItemRow(
                         route: "recents", selection: state.selection, onSelect: select
@@ -418,7 +418,7 @@ struct BrowserSidebar: View, Equatable {
                         SidebarRowMenu(itemID: "row:recents")
                     }
                 }
-                // HOMY: drag a section's title to move it; right-click hides.
+                // HOME: drag a section's title to move it; right-click hides.
                 ForEach(state.layout.visibleSections, id: \.self) { section in
                     sectionRows(section)
                 }
@@ -433,22 +433,22 @@ struct BrowserSidebar: View, Equatable {
                     .padding(4).allowsHitTesting(false)
             }
         }
-        .background(SidebarSpaceAnchor())  // HOMY: shared drag coordinate space
+        .background(SidebarSpaceAnchor())  // HOME: shared drag coordinate space
         .overlay {
-            SidebarDragOverlay()  // HOMY
+            SidebarDragOverlay()  // HOME
                 .allowsHitTesting(false)
         }
     }
 
-    // HOMY: content of each reorderable section; right-click hides a whole
+    // HOME: content of each reorderable section; right-click hides a whole
     // section, individual rows hide via their own context menus.
     @ViewBuilder private func sectionRows(_ section: SidebarSection) -> some View {
         if !state.layout.isHidden("sec:" + section.rawValue) {
             switch section {
-            case .categories: HomyCategorySection(layout: state.layout, selection: state.selection, onSelect: select)
-            case .smartFolders: HomySmartFolderSection(layout: state.layout, selection: state.selection, onSelect: select)
-            case .collections: HomyCollectionSection(select: select, selection: state.selection)
-            case .savedSearches: HomySavedSearchSection(select: select, selection: state.selection)
+            case .categories: HomeCategorySection(layout: state.layout, selection: state.selection, onSelect: select)
+            case .smartFolders: HomeSmartFolderSection(layout: state.layout, selection: state.selection, onSelect: select)
+            case .collections: HomeCollectionSection(select: select, selection: state.selection)
+            case .savedSearches: HomeSavedSearchSection(select: select, selection: state.selection)
             case .favorites: favoritesSection
             case .locations: locationsSection
             case .tags: tagsSection
@@ -581,7 +581,7 @@ struct BrowserSidebar: View, Equatable {
 
 }
 
-/// HOMY: a sidebar row drawn by hand — hover highlight, selection fill,
+/// HOME: a sidebar row drawn by hand — hover highlight, selection fill,
 /// tap to navigate. Plain views instead of List rows: no selection machinery
 /// to fight, so drags own their events completely.
 struct SidebarRowChrome: ViewModifier {
@@ -622,7 +622,7 @@ struct SidebarItemRow<Menu: View, LabelContent: View>: View {
     }
 }
 
-/// HOMY: standard context menu for hideable built-in sidebar rows.
+/// HOME: standard context menu for hideable built-in sidebar rows.
 struct SidebarRowMenu: View {
     let itemID: String
     @ViewBuilder var body: some View {
@@ -637,7 +637,7 @@ struct SidebarRowMenu: View {
     }
 }
 
-/// HOMY: the floating drag preview and insertion line, drawn over the list.
+/// HOME: the floating drag preview and insertion line, drawn over the list.
 /// Coordinates arrive in the reference box's space (y-up) and are converted
 /// to SwiftUI's local space (y-down) for drawing.
 struct SidebarDragOverlay: View {
@@ -720,7 +720,7 @@ struct SidebarDragOverlay: View {
     }
 }
 
-/// HOMY: restore anything removed from the sidebar, Finder-style.
+/// HOME: restore anything removed from the sidebar, Finder-style.
 struct CustomizeSidebarSheet: View {
     @State private var layout = SidebarLayout.load()
     @Environment(\.dismiss) private var dismiss
@@ -757,11 +757,11 @@ struct CustomizeSidebarSheet: View {
     @ViewBuilder private func builtInRows(_ section: SidebarSection) -> some View {
         switch section {
         case .categories:
-            ForEach(HomyCategory.allCases) { category in
+            ForEach(HomeCategory.allCases) { category in
                 toggle(category.title, "row:cat:" + category.rawValue)
             }
         case .smartFolders:
-            ForEach(HomySmartFolder.allCases) { smart in
+            ForEach(HomeSmartFolder.allCases) { smart in
                 toggle(smart.title, "row:smart:" + smart.rawValue)
             }
         case .locations:

@@ -2,16 +2,16 @@ import AppIntents
 import AppKit
 import Foundation
 
-// HOMY: Shortcuts / Siri actions — Find Files, Get Latest Download and
-// Search in Homy, registered with the system when running from the app
+// HOME: Shortcuts / Siri actions — Find Files, Get Latest Download and
+// Search in Home, registered with the system when running from the app
 // bundle.
 
-struct HomyIntentError: LocalizedError {
+struct HomeIntentError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
 }
 
-struct HomyFindFilesIntent: AppIntent {
+struct HomeFindFilesIntent: AppIntent {
     static var title: LocalizedStringResource = "Find Files"
     static var description = IntentDescription(
         "Search filenames across this Mac with the FinderSearch index.")
@@ -21,18 +21,18 @@ struct HomyFindFilesIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[IntentFile]> {
-        let reply = try await HomyServices.shared.engine.request([
-            "q": HomyQuery.translate(query), "limit": 20,
+        let reply = try await HomeServices.shared.engine.request([
+            "q": HomeQuery.translate(query), "limit": 20,
         ])
         guard reply.ok else {
-            throw HomyIntentError(message: "Search index is unavailable")
+            throw HomeIntentError(message: "Search index is unavailable")
         }
         let files = (reply.hits ?? []).map { IntentFile(fileURL: $0.url) }
         return .result(value: files)
     }
 }
 
-struct HomyGetLatestDownloadIntent: AppIntent {
+struct HomeGetLatestDownloadIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Latest Download"
     static var description = IntentDescription(
         "Return the most recently downloaded file from Downloads.")
@@ -44,13 +44,13 @@ struct HomyGetLatestDownloadIntent: AppIntent {
         guard
             let latest = hits.filter({ $0.kind == "file" }).max(by: { $0.mtime < $1.mtime })
         else {
-            throw HomyIntentError(message: "Downloads folder is empty")
+            throw HomeIntentError(message: "Downloads folder is empty")
         }
         return .result(value: IntentFile(fileURL: latest.url))
     }
 }
 
-struct HomySearchInAppIntent: AppIntent {
+struct HomeSearchInAppIntent: AppIntent {
     static var title: LocalizedStringResource = "Search in Hearth"
     static var description = IntentDescription(
         "Open the Hearth browser window with the given search.")
@@ -60,22 +60,22 @@ struct HomySearchInAppIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let reply = try await HomyServices.shared.engine.request([
-            "q": HomyQuery.translate(query), "limit": 20,
+        let reply = try await HomeServices.shared.engine.request([
+            "q": HomeQuery.translate(query), "limit": 20,
         ])
         let count = reply.hits?.count ?? 0
         NotificationCenter.default.post(
-            name: .homyRunSavedSearch, object: nil, userInfo: ["query": query])
+            name: .homeRunSavedSearch, object: nil, userInfo: ["query": query])
         let bundle = Bundle.main.bundleURL
         if bundle.pathExtension == "app" { NSWorkspace.shared.open(bundle) }
         return .result(dialog: count == 0 ? "No matches" : "Found \(count) files")
     }
 }
 
-struct HomyShortcuts: AppShortcutsProvider {
+struct HomeShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: HomyFindFilesIntent(),
+            intent: HomeFindFilesIntent(),
             phrases: [
                 "\(.applicationName) find files",
             ],
@@ -83,7 +83,7 @@ struct HomyShortcuts: AppShortcutsProvider {
             systemImageName: "magnifyingglass"
         )
         AppShortcut(
-            intent: HomyGetLatestDownloadIntent(),
+            intent: HomeGetLatestDownloadIntent(),
             phrases: [
                 "\(.applicationName) latest download",
             ],

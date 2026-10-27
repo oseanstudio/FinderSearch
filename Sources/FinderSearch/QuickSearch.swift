@@ -3,7 +3,7 @@ import AppKit
 import Carbon.HIToolbox
 import Combine
 
-// HOMY: Quick Search (⇧⌘Space, works from any app) — a Spotlight-style
+// HOME: Quick Search (⇧⌘Space, works from any app) — a Spotlight-style
 // panel over the same fsearch index, with recents shown while empty.
 
 @MainActor final class QuickSearchModel: ObservableObject {
@@ -15,15 +15,15 @@ import Combine
     private var task: Task<Void, Never>?
     private var generation = 0
     private var recentsLoaded = false
-    // HOMY: the app-wide shared engine; the model stays inert until the
+    // HOME: the app-wide shared engine; the model stays inert until the
     // panel is first shown, so launching the app spawns nothing.
     private let engine: Engine
 
-    init(engine: Engine = HomyServices.shared.engine) {
+    init(engine: Engine = HomeServices.shared.engine) {
         self.engine = engine
     }
 
-    /// HOMY: called when the panel is shown, not at launch — the first open
+    /// HOME: called when the panel is shown, not at launch — the first open
     /// warms the recents list; later opens refresh it silently.
     func warm() async {
         await loadRecents()
@@ -60,7 +60,7 @@ import Combine
                 try await Task.sleep(for: .milliseconds(80))
                 try Task.checkCancellation()
                 let reply = try await self.engine.request([
-                    "q": HomyQuery.translate(text), "limit": 12,
+                    "q": HomeQuery.translate(text), "limit": 12,
                 ])
                 guard revision == self.generation, !Task.isCancelled else { return }
                 self.results = reply.ok ? (reply.hits ?? []) : []
@@ -239,10 +239,10 @@ enum NSMoveCommand { case moveUp, moveDown }
 
 @MainActor final class QuickSearchController: ObservableObject {
     static let shared = QuickSearchController()
-    static let signature: OSType = 0x484F4D59  // 'HOMY'
+    static let signature: OSType = 0x484F4D59  // 'HOME'
     static let identifier: UInt32 = 1
 
-    // HOMY: lazy — created on the first toggle/show, never at launch.
+    // HOME: lazy — created on the first toggle/show, never at launch.
     private(set) lazy var model = QuickSearchModel()
     private var panel: NSPanel?
     private var hotKeyRef: EventHotKeyRef?
@@ -323,7 +323,7 @@ enum NSMoveCommand { case moveUp, moveDown }
         panel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         model.query = ""
-        // HOMY: recents load on first show (and refresh after), not at launch.
+        // HOME: recents load on first show (and refresh after), not at launch.
         Task {
             await model.warm()
             if model.query.isEmpty { model.results = model.recents }

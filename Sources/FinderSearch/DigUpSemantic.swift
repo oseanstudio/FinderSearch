@@ -13,7 +13,7 @@ import AppKit
     @Published var embedMS = 0
     @Published var searchMS = 0
     @Published var searching = false
-    @Published var selected = 0  // HOMY: keyboard-highlighted result
+    @Published var selected = 0  // HOME: keyboard-highlighted result
     @Published var kindFilter: String? { didSet { if !query.isEmpty { runNow() } } }
     @Published var showFolders = false
     private var task: Task<Void, Never>?
@@ -83,7 +83,7 @@ struct SemanticSearchView: View {
     @StateObject private var setup = DigUpSetupModel()
     @StateObject private var indexing = DigUpIndexingModel()
     @StateObject private var service = DigUpService.shared
-    @StateObject private var navigator = HomyKeyNavigator()  // HOMY: keyboard support
+    @StateObject private var navigator = HomeKeyNavigator()  // HOME: keyboard support
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -123,7 +123,7 @@ struct SemanticSearchView: View {
         .onDisappear { navigator.remove() }
     }
 
-    // HOMY: arrows step through results even while typing in the field;
+    // HOME: arrows step through results even while typing in the field;
     // Space Quick Looks and Return opens the highlighted one once focus
     // leaves the field.
     private func installNavigator() {
@@ -278,7 +278,7 @@ struct SemanticSearchView: View {
                     .help(error).foregroundStyle(.orange)
             }
         }
-        // HOMY: this is the route's single bottom row (the shared bar is
+        // HOME: this is the route's single bottom row (the shared bar is
         // hidden here), so it carries the same height and treatment.
         .font(.system(size: 11)).foregroundStyle(.secondary)
         .padding(.horizontal, 14).frame(height: 28)
@@ -305,8 +305,8 @@ struct SemanticSearchView: View {
 
 struct DigUpResultRow: View {
     let hit: DigUpHit
-    var highlighted = false  // HOMY: keyboard selection
-    @ObservedObject private var theme = HomyTheme.shared
+    var highlighted = false  // HOME: keyboard selection
+    @ObservedObject private var theme = HomeTheme.shared
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

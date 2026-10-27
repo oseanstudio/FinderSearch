@@ -8,7 +8,7 @@ stage=$(mktemp -d "${TMPDIR:-/tmp}/Hearth-icon.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
 iconset="$stage/AppIcon.iconset"
 mkdir -p "$iconset" "${output:h}"
-# HOMY: Hearth renders its own mark; the upstream artwork pipeline is unused.
+# HOME: Hearth renders its own mark; the upstream artwork pipeline is unused.
 swift scripts/render-hearth-icon.swift "$stage/AppIcon.png" 1024
 for size in 16 32 128 256 512; do
     sips -z "$size" "$size" "$stage/AppIcon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null

@@ -4,6 +4,7 @@ import Quartz
 import UniformTypeIdentifiers
 
 @main struct FinderSearchApp: App {
+    init() { LegacyDefaults.migrate() }  // HOME: carry pre-rename settings over
     @Environment(\.openWindow) private var openWindow
     @FocusedObject private var model: SearchModel?
     @FocusedObject private var workspace: BrowserWorkspace?
@@ -15,7 +16,7 @@ import UniformTypeIdentifiers
             }
         }
         .defaultSize(width: 1050, height: 680).windowToolbarStyle(.unified)
-        MenuBarExtra("Hearth", systemImage: "arrow.down.circle") {  // HOMY
+        MenuBarExtra("Hearth", systemImage: "arrow.down.circle") {  // HOME
             MenuBarDownloadsView()
         }
         // Window style: the menu needs a live text field for its search bar.
@@ -106,8 +107,8 @@ import UniformTypeIdentifiers
                     NotificationCenter.default.post(name: .focusSearch, object: nil)
                 }.keyboardShortcut("f")
             }
-            CommandMenu("Hearth") {  // HOMY
-                HomyCommandMenu(model: model)
+            CommandMenu("Hearth") {  // HOME
+                HomeCommandMenu(model: model)
             }
         }
     }
@@ -131,9 +132,9 @@ struct BrowserRoot: View {
 struct BrowserView: View {
     @ObservedObject var workspace: BrowserWorkspace
     @ObservedObject var model: SearchModel
-    @ObservedObject private var updates = UpdateCenter.shared  // HOMY
-    @State private var showUpdates = false  // HOMY
-    // HOMY: sidebar layout; a plain @State so the EquatableView on the
+    @ObservedObject private var updates = UpdateCenter.shared  // HOME
+    @State private var showUpdates = false  // HOME
+    // HOME: sidebar layout; a plain @State so the EquatableView on the
     // sidebar sees the change (UserDefaults alone would not re-render it).
     @State private var sidebarLayout = SidebarLayout.load()
     @State private var showSidebarCustomize = false
@@ -145,7 +146,7 @@ struct BrowserView: View {
     @State private var browserWindow: NSWindow?
     @State private var iconSize: Double = 64
     @State private var gridColumns = 5
-    // HOMY: type-select buffer (keystrokes within one second join the prefix).
+    // HOME: type-select buffer (keystrokes within one second join the prefix).
     @State private var typeSelectBuffer = ""
     @State private var typeSelectReset: Task<Void, Never>?
     private let tags = SidebarTags.values
@@ -156,7 +157,7 @@ struct BrowserView: View {
                     route: model.route, favorites: workspace.favorites,
                     volumes: workspace.volumes, ejectingVolumes: workspace.ejectingVolumes,
                     showDiskAccessHint: model.ready && !model.fullDiskAccess,
-                    layout: sidebarLayout),  // HOMY
+                    layout: sidebarLayout),  // HOME
                 select: { route in
                     fileNavigationActive = false; model.sidebar(route)
                 },
@@ -169,7 +170,7 @@ struct BrowserView: View {
         } detail: {
             VStack(spacing: 0) {
                 if workspace.tabs.count > 1 { BrowserTabBar(workspace: workspace) }
-                if model.isSearch { searchScopeBar; HomySearchChipsBar(model: model) }  // HOMY
+                if model.isSearch { searchScopeBar; HomeSearchChipsBar(model: model) }  // HOME
                 if let error = model.error {
                     HStack {
                         Image(systemName: "exclamationmark.triangle");
@@ -188,10 +189,10 @@ struct BrowserView: View {
                     .modifier(SafeBackgroundDropTarget(model: model))
                     .focusable(model.viewMode == .icons || model.viewMode == .gallery)
                     .focused($keyboardFocus, equals: .files).focusEffectDisabled()
-                // HOMY: the Search route has its own single bottom row (its
+                // HOME: the Search route has its own single bottom row (its
                 // status plus actions); the shared bar's crumbs, item count
                 // and icon slider mean nothing there.
-                if HomyRoute(model.route) != .semantic {
+                if HomeRoute(model.route) != .semantic {
                     bottomBar
                 }
             }
@@ -248,7 +249,7 @@ struct BrowserView: View {
                         Image(systemName: "ellipsis")
                     }.help("Actions")
                 }
-                ToolbarItem {  // HOMY: update badge
+                ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
                 }
             }
@@ -267,8 +268,8 @@ struct BrowserView: View {
         .onAppear {
             model.start()
             installKeyMonitor()
-            QuickSearchController.shared.installHotkey()  // HOMY
-            updates.startMonitoring()  // HOMY
+            QuickSearchController.shared.installHotkey()  // HOME
+            updates.startMonitoring()  // HOME
         }
         .onChange(of: model.id) { _, _ in
             keyboardFocus = nil; fileNavigationActive = false
@@ -280,25 +281,25 @@ struct BrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             fileNavigationActive = false; model.sort = .relevance; keyboardFocus = .search
         }
-        .onReceive(NotificationCenter.default.publisher(for: .homyRunSavedSearch)) { note in  // HOMY
+        .onReceive(NotificationCenter.default.publisher(for: .homeRunSavedSearch)) { note in  // HOME
             guard NSApp.keyWindow === browserWindow,
                 let query = note.userInfo?["query"] as? String
             else { return }
             model.query = query
         }
-        .onReceive(NotificationCenter.default.publisher(for: .homyShowUpdates)) { _ in  // HOMY
+        .onReceive(NotificationCenter.default.publisher(for: .homeShowUpdates)) { _ in  // HOME
             showUpdates = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.changed)) { _ in  // HOMY
+        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.changed)) { _ in  // HOME
             sidebarLayout = SidebarLayout.load()
         }
-        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.customize)) { _ in  // HOMY
+        .onReceive(NotificationCenter.default.publisher(for: SidebarLayout.customize)) { _ in  // HOME
             showSidebarCustomize = true
         }
-        .sheet(isPresented: $showSidebarCustomize) {  // HOMY
+        .sheet(isPresented: $showSidebarCustomize) {  // HOME
             CustomizeSidebarSheet()
         }
-        .sheet(isPresented: $showUpdates) {  // HOMY
+        .sheet(isPresented: $showUpdates) {  // HOME
             UpdatesSheet()
         }
         .onReceive(
@@ -334,7 +335,7 @@ struct BrowserView: View {
         .sheet(item: $model.batchRename) { request in
             BatchRenameSheet(model: model, request: request)
         }
-        .onChange(of: model.preview) { _, hit in  // HOMY: Quick Look in its own resizable window
+        .onChange(of: model.preview) { _, hit in  // HOME: Quick Look in its own resizable window
             if hit != nil {
                 QuickLookWindowController.shared.present(model)
             } else if QuickLookWindowController.shared.shows(model) {
@@ -359,7 +360,7 @@ struct BrowserView: View {
                 !(NSApp.keyWindow?.firstResponder is NSTextView)
             else { return event }
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
-                // HOMY: type-select — typing jumps through filenames by prefix
+                // HOME: type-select — typing jumps through filenames by prefix
                 // ("godot" lands on the first godot* item, cycling as you go).
                 if event.specialKey == nil,
                     event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
@@ -402,10 +403,10 @@ struct BrowserView: View {
     private var searchScopeBar: some View {
         HStack(spacing: 10) {
             Text("Search:").foregroundStyle(.secondary)
-            // HOMY: on a category or smart-folder route the search narrows to
+            // HOME: on a category or smart-folder route the search narrows to
             // it; the control makes that visible and widens in one click.
-            if HomyRoute(model.route)?.engineQuery != nil {
-                Picker("Scope", selection: $model.homySearchWholeDisk) {
+            if HomeRoute(model.route)?.engineQuery != nil {
+                Picker("Scope", selection: $model.homeSearchWholeDisk) {
                     Text("In \(model.title)").tag(false)
                     Text("This Mac").tag(true)
                 }.pickerStyle(.segmented)
@@ -427,8 +428,8 @@ struct BrowserView: View {
             Color(nsColor: .controlBackgroundColor))
     }
     @ViewBuilder private var fileContent: some View {
-        if let homy = HomySpecialContent(model: model, workspace: workspace) {  // HOMY
-            homy.id(model.id)
+        if let home = HomeSpecialContent(model: model, workspace: workspace) {  // HOME
+            home.id(model.id)
         } else if model.viewMode == .columns && model.canWriteHere {
             ColumnBrowser(model: model, focusFiles: { focusFiles() }, rowMenu: rowActions).id(
                 model.id)
@@ -512,7 +513,7 @@ struct BrowserView: View {
             model: model, focusFiles: focusFiles, newTab: { workspace.newTab($0) },
             addFavorite: { workspace.addFavorite($0) })
     }
-    // HOMY: one bottom row — breadcrumbs on the left, the item count and the
+    // HOME: one bottom row — breadcrumbs on the left, the item count and the
     // icon-size slider together on the right (upstream stacked two rows).
     private var bottomBar: some View {
         VStack(spacing: 0) {
@@ -552,14 +553,14 @@ struct BrowserView: View {
             HStack(spacing: 5) {
                 if !model.isSearch,
                     model.route == "recents" || model.route.hasPrefix("tag:")
-                        || HomyRoute(model.route) != nil  // HOMY
+                        || HomeRoute(model.route) != nil  // HOME
                 {
                     Label(
                         model.title,
                         systemImage:
                             model.route == "recents"
                             ? "clock" : model.route.hasPrefix("tag:")
-                                ? "tag" : HomyRoute(model.route)?.symbol ?? "house")  // HOMY
+                                ? "tag" : HomeRoute(model.route)?.symbol ?? "house")  // HOME
                 } else {
                     ForEach(model.ancestors, id: \.path) { url in
                         Button {
@@ -594,14 +595,14 @@ struct BrowserView: View {
             if model.isSearch { Text(String(format: "· %.1f ms", model.elapsed)).monospacedDigit() }
             if model.viewMode == .icons {
                 Image(systemName: "square").font(.system(size: 8));
-                // HOMY: 256 max — 96 was too small for photo browsing.
+                // HOME: 256 max — 96 was too small for photo browsing.
                 Slider(value: $iconSize, in: 40...256).frame(width: 110).accessibilityLabel(
                     "Icon Size");
                 Image(systemName: "square").font(.system(size: 13))
             }
         }
     }
-    // HOMY: toolbar bell for pending updates; the badge counts the repos.
+    // HOME: toolbar bell for pending updates; the badge counts the repos.
     @ViewBuilder private var updatesBadgeButton: some View {
         if !updates.offers.isEmpty {
             Button {

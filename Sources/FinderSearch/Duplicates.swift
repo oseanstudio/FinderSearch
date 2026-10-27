@@ -5,7 +5,7 @@ import Vision
 import CoreGraphics
 import ImageIO
 
-// HOMY: Duplicates — identical files confirmed by SHA-256 and look-alike
+// HOME: Duplicates — identical files confirmed by SHA-256 and look-alike
 // photos found with Vision feature prints, with keep-one trash-the-rest.
 
 struct DuplicateGroup: Identifiable, Sendable {
@@ -222,7 +222,7 @@ enum DuplicateScanner {
         scanTask?.cancel()
         scanTask = Task {
             do {
-                let reply = try await HomyServices.shared.engine.request([
+                let reply = try await HomeServices.shared.engine.request([
                     "q": "kind:file in:" + scope.path, "limit": 20000,
                 ])
                 guard revision == generation else { return }
@@ -295,8 +295,8 @@ enum DuplicateScanner {
 struct DuplicatesView: View {
     @ObservedObject var model: SearchModel
     @StateObject private var data = DuplicatesModel()
-    @StateObject private var navigator = HomyKeyNavigator()  // HOMY: keyboard support
-    @ObservedObject private var theme = HomyTheme.shared
+    @StateObject private var navigator = HomeKeyNavigator()  // HOME: keyboard support
+    @ObservedObject private var theme = HomeTheme.shared
     @State private var selectedGroup = 0
 
     private enum ScanScope: Hashable { case home, folder }
@@ -366,7 +366,7 @@ struct DuplicatesView: View {
             set: { if data.groups.indices.contains(index) { data.groups[index] = $0 } })
     }
 
-    /// HOMY: arrows step through groups, Space Quick Looks the keeper,
+    /// HOME: arrows step through groups, Space Quick Looks the keeper,
     /// Return opens it. Active only on the duplicates route.
     private func installNavigator() {
         navigator.install(
@@ -415,8 +415,8 @@ struct DuplicateGroupCard: View {
     @Binding var group: DuplicateGroup
     @ObservedObject var data: DuplicatesModel
     @ObservedObject var model: SearchModel
-    var highlighted = false  // HOMY: keyboard selection
-    @ObservedObject private var theme = HomyTheme.shared
+    var highlighted = false  // HOME: keyboard selection
+    @ObservedObject private var theme = HomeTheme.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -468,7 +468,7 @@ struct DuplicateGroupCard: View {
         }.padding(14)
             .background(RoundedRectangle(cornerRadius: theme.cardRadius).fill(theme.cardFill))
             .overlay(
-                // HOMY: keyboard-selected card.
+                // HOME: keyboard-selected card.
                 RoundedRectangle(cornerRadius: theme.cardRadius)
                     .stroke(
                         highlighted ? Color.accentColor : Color.clear,

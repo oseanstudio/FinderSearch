@@ -5,11 +5,11 @@ import ImageIO
 import CoreGraphics
 import PDFKit
 
-// HOMY: Inspector (⌥⌘I) — everything Homy shows: kind, size, dates, tags,
+// HOME: Inspector (⌥⌘I) — everything Home shows: kind, size, dates, tags,
 // image dimensions, camera EXIF, media duration/resolution and download
 // source, with Quick Look-sized preview and one-click actions.
 
-struct HomyInspectorData {
+struct HomeInspectorData {
     var hit: Hit
     var created: Date?
     var dimensions: CGSize?
@@ -21,8 +21,8 @@ struct HomyInspectorData {
     var sourceURL: URL?
     var tags: [String] = []
 
-    static func load(_ hit: Hit) async -> HomyInspectorData {
-        var data = HomyInspectorData(hit: hit)
+    static func load(_ hit: Hit) async -> HomeInspectorData {
+        var data = HomeInspectorData(hit: hit)
         let url = hit.url
         let ext = url.pathExtension.lowercased()
         if hit.isImageFile {
@@ -117,9 +117,9 @@ struct HomyInspectorData {
     }
 }
 
-struct HomyInspectorView: View {
+struct HomeInspectorView: View {
     let hit: Hit
-    @State private var data: HomyInspectorData?
+    @State private var data: HomeInspectorData?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -156,10 +156,10 @@ struct HomyInspectorView: View {
                 }
             }.padding(10)
         }.frame(minWidth: 380, minHeight: 460)
-            .task(id: hit.path) { data = await HomyInspectorData.load(hit) }
+            .task(id: hit.path) { data = await HomeInspectorData.load(hit) }
     }
 
-    @ViewBuilder private func rows(_ data: HomyInspectorData) -> some View {
+    @ViewBuilder private func rows(_ data: HomeInspectorData) -> some View {
         row("Kind", data.hit.typeName)
         row(
             "Size",
@@ -230,8 +230,8 @@ struct HomyInspectorView: View {
 
 // MARK: - Panel host for OCR and Inspector
 
-@MainActor final class HomyPanels {
-    static let shared = HomyPanels()
+@MainActor final class HomePanels {
+    static let shared = HomePanels()
     private var ocrPanel: NSPanel?
     private var inspectorPanel: NSPanel?
     private var savePanel: NSPanel?
@@ -248,7 +248,7 @@ struct HomyInspectorView: View {
             savePanel = panel
         }
         savePanel?.contentView = NSHostingView(
-            rootView: HomySaveSearchPanel(query: model.query))
+            rootView: HomeSaveSearchPanel(query: model.query))
         savePanel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -282,7 +282,7 @@ struct HomyInspectorView: View {
             panel.center()
             inspectorPanel = panel
         }
-        inspectorPanel?.contentView = NSHostingView(rootView: HomyInspectorView(hit: hit))
+        inspectorPanel?.contentView = NSHostingView(rootView: HomeInspectorView(hit: hit))
         inspectorPanel?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

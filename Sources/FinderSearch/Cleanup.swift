@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HOMY: Clean Up — smart cards that surface reclaimable space: old
+// HOME: Clean Up — smart cards that surface reclaimable space: old
 // installers, forgotten downloads, old screenshots, big videos and unused
 // apps. Everything goes to Trash; nothing is deleted permanently.
 
@@ -61,7 +61,7 @@ struct CleanupCard: Identifiable {
         generation += 1
         let revision = generation
         loading = true
-        // HOMY: cards load concurrently instead of one engine round-trip at
+        // HOME: cards load concurrently instead of one engine round-trip at
         // a time; results are re-ordered to the fixed definition order.
         var loaded: [CleanupCard] = await withTaskGroup(
             of: CleanupCard.self
@@ -81,14 +81,14 @@ struct CleanupCard: Identifiable {
         loading = false
     }
 
-    /// HOMY: one card's queries, off the caller's actor.
+    /// HOME: one card's queries, off the caller's actor.
     private static func loadCard(_ definition: CleanupCard) async -> CleanupCard {
         var files: [Hit] = []
         for (folder, query) in definition.queries {
             var fields: [String: Any] = ["q": query, "limit": 1000]
             if !folder.isEmpty { fields["in"] = folder }
             guard
-                let reply = try? await HomyServices.shared.engine.request(fields),
+                let reply = try? await HomeServices.shared.engine.request(fields),
                 reply.ok
             else { continue }
             files += reply.hits ?? []
@@ -128,12 +128,12 @@ struct CleanupCard: Identifiable {
     }
 }
 
-// HomyCore.swift provides Hit.isScreenshot.
+// HomeCore.swift provides Hit.isScreenshot.
 
 struct CleanupView: View {
     @ObservedObject var model: SearchModel
     @StateObject private var data = CleanupModel()
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
     @State private var expanded: Set<String> = []
 
     var body: some View {
@@ -157,7 +157,7 @@ struct CleanupView: View {
                         Spacer()
                     }.padding(.vertical, 50)
                 }
-                BigFoldersCard()  // HOMY: space map at a glance
+                BigFoldersCard()  // HOME: space map at a glance
                 ForEach(data.cards) { card in
                     CleanupCardView(
                         card: card, expanded: $expanded, data: data, model: model)
@@ -184,7 +184,7 @@ struct CleanupCardView: View {
     @Binding var expanded: Set<String>
     @ObservedObject var data: CleanupModel
     @ObservedObject var model: SearchModel
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
     @State private var selection: Set<String> = []
 
     var body: some View {

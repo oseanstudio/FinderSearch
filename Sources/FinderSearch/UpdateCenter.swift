@@ -4,7 +4,7 @@ import AppKit
 // UPDATES: watch both upstreams and install what they ship, keeping every
 // fork feature intact:
 //
-//   • zeusinsight/FinderSearch — merging upstream/main into the fork's homy
+//   • zeusinsight/FinderSearch — merging upstream/main into the fork's home
 //     branch (scripts/sync-upstream.sh) and rebuilding. Features live in
 //     fork-only files, so the merge preserves them by construction.
 //   • ARahim3/DigUp — the app update (brew or DMG). The model and index live
@@ -83,7 +83,7 @@ enum GitHubReleases {
     }
 
     /// Fetches a release asset to disk, streaming in chunks so even a large
-    /// asset never sits in memory. HOMY
+    /// asset never sits in memory. HOME
     static func download(
         url: URL, to destination: URL,
         progress: @escaping (Double, Int64, Int64) -> Void
@@ -263,12 +263,12 @@ struct UpdateOffer: Identifiable {
     }
 
     private func announce(_ fresh: [UpdateOffer]) {
-        NotificationCenter.default.post(name: .homyUpdatesFound, object: nil)
+        NotificationCenter.default.post(name: .homeUpdatesFound, object: nil)
         // UNUserNotificationCenter aborts outside a real .app bundle (tests,
         // dev runs), so attention requests do the alerting instead.
         guard NSApp != nil else { return }
         if NSApp.isActive {
-            NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
+            NotificationCenter.default.post(name: .homeShowUpdates, object: nil)
         } else {
             NSApp.requestUserAttention(.informationalRequest)
         }
@@ -311,7 +311,7 @@ struct UpdateOffer: Identifiable {
         if installLog.count > 20000 { installLog = String(installLog.suffix(20000)) }
     }
 
-    /// Upstream update: merge upstream/main into homy and rebuild. The fork's
+    /// Upstream update: merge upstream/main into home and rebuild. The fork's
     /// features are separate files with marked integration points, so the
     /// merge keeps them.
     private func installFinderSearch() async {
@@ -489,7 +489,7 @@ struct UpdateOffer: Identifiable {
     func relaunchFork() {
         guard let repo = Self.repoRoot else { return }
         let fresh = repo.appendingPathComponent("dist/Hearth.app")
-        // HOMY: when Hearth runs from Applications (the Full Disk Access
+        // HOME: when Hearth runs from Applications (the Full Disk Access
         // flow installs it there), refresh that copy and relaunch into it —
         // otherwise the user would bounce back to the repo build.
         let installed = Bundle.main.bundleURL
@@ -513,7 +513,7 @@ struct UpdateOffer: Identifiable {
 
     // MARK: process helpers
 
-    /// HOMY: the blocking reads run detached — `brew list` alone stalls the
+    /// HOME: the blocking reads run detached — `brew list` alone stalls the
     /// main actor for a second or two.
     static func which(_ name: String) async -> URL? {
         await Task.detached(priority: .userInitiated) {
@@ -605,8 +605,8 @@ struct UpdateOffer: Identifiable {
 }
 
 extension Notification.Name {
-    static let homyUpdatesFound = Notification.Name("homy.updatesFound")
-    static let homyShowUpdates = Notification.Name("homy.showUpdates")
+    static let homeUpdatesFound = Notification.Name("home.updatesFound")
+    static let homeShowUpdates = Notification.Name("home.showUpdates")
 }
 
 // MARK: - UI
@@ -624,7 +624,7 @@ struct UpdatesSheet: View {
                 if center.checking { ProgressView().controlSize(.small) }
                 Button("Check Now") { Task { await center.checkNow() } }
                     .disabled(center.checking || center.installKind != nil)
-                Button {  // HOMY: sheets on macOS ship no close control of their own
+                Button {  // HOME: sheets on macOS ship no close control of their own
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -743,7 +743,7 @@ struct UpdateOfferRow: View {
             }
         }.padding(12)
             .background(
-                RoundedRectangle(cornerRadius: HomyTheme.shared.cardRadius)
-                    .fill(HomyTheme.shared.cardFill))
+                RoundedRectangle(cornerRadius: HomeTheme.shared.cardRadius)
+                    .fill(HomeTheme.shared.cardFill))
     }
 }

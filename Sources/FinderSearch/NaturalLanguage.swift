@@ -2,11 +2,11 @@ import SwiftUI
 import AppKit
 import Combine
 
-// HOMY: Natural-language search. "pdfs from last week over 5 mb from github"
-// becomes engine filters shown as editable chips, exactly like Homy's ⌘F.
+// HOME: Natural-language search. "pdfs from last week over 5 mb from github"
+// becomes engine filters shown as editable chips, exactly like Home's ⌘F.
 
 /// Parsed interpretation of a plain-English search query.
-struct HomyParsedQuery: Equatable {
+struct HomeParsedQuery: Equatable {
     var text: String?
     var type: String?
     var kind: String?
@@ -16,7 +16,7 @@ struct HomyParsedQuery: Equatable {
     var grep: String?
 
     var isEmpty: Bool {
-        self == HomyParsedQuery()
+        self == HomeParsedQuery()
     }
 
     /// The fsearch query the parse compiles to.
@@ -44,12 +44,12 @@ struct HomyParsedQuery: Equatable {
     }
 }
 
-enum HomyQuery {
+enum HomeQuery {
     /// Extra runtime options the chips bar toggles; persisted so it survives
-    /// relaunches. HOMY
+    /// relaunches. HOME
     static var includeContents: Bool {
-        get { UserDefaults.standard.bool(forKey: "homy.includeContents") }
-        set { UserDefaults.standard.set(newValue, forKey: "homy.includeContents") }
+        get { UserDefaults.standard.bool(forKey: "home.includeContents") }
+        set { UserDefaults.standard.set(newValue, forKey: "home.includeContents") }
     }
 
     private static let typeWords: [String: String] = [
@@ -75,8 +75,8 @@ enum HomyQuery {
 
     /// Parse plain English into filters. Returns the empty parse when the
     /// query already looks like fsearch syntax or has nothing recognizable.
-    static func parse(_ raw: String) -> HomyParsedQuery {
-        var result = HomyParsedQuery()
+    static func parse(_ raw: String) -> HomeParsedQuery {
+        var result = HomeParsedQuery()
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return result }
         // Raw fsearch syntax passes through untouched.
@@ -145,7 +145,7 @@ enum HomyQuery {
         if result.type == nil, result.kind == nil, result.mtime == nil, result.size == nil,
             result.source == nil, result.grep == nil
         {
-            return HomyParsedQuery()
+            return HomeParsedQuery()
         }
         return result
     }
@@ -281,7 +281,7 @@ struct SavedSearch: Identifiable, Equatable, Codable {
 
 @MainActor final class SavedSearches: ObservableObject {
     static let shared = SavedSearches()
-    static let key = "homy.savedSearches"
+    static let key = "home.savedSearches"
 
     @Published var entries: [SavedSearch] {
         didSet { save() }
@@ -310,7 +310,7 @@ struct SavedSearch: Identifiable, Equatable, Codable {
     func run(_ entry: SavedSearch, select: (String) -> Void) {
         select("home")
         NotificationCenter.default.post(
-            name: .homyRunSavedSearch, object: nil, userInfo: ["query": entry.query])
+            name: .homeRunSavedSearch, object: nil, userInfo: ["query": entry.query])
     }
 
     private func save() {
@@ -321,20 +321,20 @@ struct SavedSearch: Identifiable, Equatable, Codable {
 }
 
 extension Notification.Name {
-    static let homyRunSavedSearch = Notification.Name("homy.runSavedSearch")
+    static let homeRunSavedSearch = Notification.Name("home.runSavedSearch")
 }
 
 // MARK: - Chips bar
 
 /// Shown under the toolbar while searching: how the query was parsed, each
 /// filter as a removable chip, a contents toggle, and Save.
-struct HomySearchChipsBar: View {
+struct HomeSearchChipsBar: View {
     @ObservedObject var model: SearchModel
     @ObservedObject private var saved = SavedSearches.shared
     @State private var savePrompt: SavePrompt?
 
-    private var parsed: HomyParsedQuery {
-        HomyQuery.parse(model.query)
+    private var parsed: HomeParsedQuery {
+        HomeQuery.parse(model.query)
     }
 
     var body: some View {
@@ -357,9 +357,9 @@ struct HomySearchChipsBar: View {
             }
             Spacer()
             Toggle("Contents", isOn: Binding(
-                get: { HomyQuery.includeContents },
+                get: { HomeQuery.includeContents },
                 set: {
-                    HomyQuery.includeContents = $0
+                    HomeQuery.includeContents = $0
                     if model.isSearch { model.schedule(immediate: true) }
                 }))
                 .controlSize(.small)
@@ -369,7 +369,7 @@ struct HomySearchChipsBar: View {
                 Image(systemName: "bookmark")
             }.buttonStyle(.borderless).help("Save Search")
                 .popover(item: $savePrompt) { prompt in
-                    HomySaveSearchField(initial: prompt.suggestion) { name in
+                    HomeSaveSearchField(initial: prompt.suggestion) { name in
                         saved.add(name, query: model.query)
                         savePrompt = nil
                     } cancel: { savePrompt = nil }
@@ -378,7 +378,7 @@ struct HomySearchChipsBar: View {
             .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private func defaultName(_ parse: HomyParsedQuery) -> String {
+    private func defaultName(_ parse: HomeParsedQuery) -> String {
         let chips = parse.chipLabels.map { "\($0.field) \($0.value)" }
         return chips.isEmpty ? model.query : chips.joined(separator: ", ")
     }
@@ -390,7 +390,7 @@ struct SavePrompt: Identifiable {
     var id: String { suggestion }
 }
 
-struct HomySaveSearchField: View {
+struct HomeSaveSearchField: View {
     let initial: String
     let save: (String) -> Void
     let cancel: () -> Void

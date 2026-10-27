@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import Quartz
 
-// HOMY: Quick Look in its own resizable window. The preview content is a
+// HOME: Quick Look in its own resizable window. The preview content is a
 // QLPreviewView that this container scales (zoom) and offsets (pan):
 //
 //   • scroll wheel / trackpad two-finger scroll — zoom, anchored at the cursor

@@ -57,7 +57,7 @@ struct FileIcon: View {
 }
 
 enum ThumbnailSizing {
-    // HOMY: 512 — the icon slider now reaches 256 pt, which is 512 px on a
+    // HOME: 512 — the icon slider now reaches 256 pt, which is 512 px on a
     // 2× display.
     static func pixels(points: Double, scale: Double) -> Int {
         Int(min(512, max(1, ceil(points * scale))))
@@ -70,7 +70,7 @@ struct FileThumbnail: View {
     @Environment(\.displayScale) private var displayScale
     @State private var image: NSImage?
     private var pixels: Int { ThumbnailSizing.pixels(points: size, scale: displayScale) }
-    // HOMY: .large keeps icons sharp past 256 px.
+    // HOME: .large keeps icons sharp past 256 px.
     private var iconSize: FileIconSize {
         pixels <= 128 ? .compact : pixels <= 256 ? .preview : .large
     }

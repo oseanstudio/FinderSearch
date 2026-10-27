@@ -1,10 +1,10 @@
 import XCTest
 @testable import FinderSearch
 
-/// Homy fork: natural-language query parsing compiles to engine filters.
-final class HomyQueryTests: XCTestCase {
+/// Home fork: natural-language query parsing compiles to engine filters.
+final class HomeQueryTests: XCTestCase {
     private func engineQuery(_ raw: String) -> String {
-        HomyQuery.translate(raw)
+        HomeQuery.translate(raw)
     }
 
     func testParsesTypeDateAndSize() {
@@ -23,7 +23,7 @@ final class HomyQueryTests: XCTestCase {
     }
 
     func testParsesSourceAndContents() {
-        let parsed = HomyQuery.parse("pdfs from gmail containing invoice")
+        let parsed = HomeQuery.parse("pdfs from gmail containing invoice")
         XCTAssertEqual(parsed.type, "pdf")
         XCTAssertEqual(parsed.source, "gmail")
         XCTAssertEqual(parsed.grep, "invoice")
@@ -50,30 +50,30 @@ final class HomyQueryTests: XCTestCase {
     }
 
     func testScreenshotsKeepNameHint() {
-        let parsed = HomyQuery.parse("screenshots from yesterday")
+        let parsed = HomeQuery.parse("screenshots from yesterday")
         XCTAssertEqual(parsed.mtime, "<2d")
         XCTAssertEqual(parsed.text, "screenshot")
     }
 }
 
-/// Homy fork: route parsing round-trips every sidebar destination.
-final class HomyRouteTests: XCTestCase {
+/// Home fork: route parsing round-trips every sidebar destination.
+final class HomeRouteTests: XCTestCase {
     @MainActor func testRoundTripsAllRoutes() {
-        for route in HomyRoute.allCases {
-            XCTAssertEqual(HomyRoute(route.route), route)
+        for route in HomeRoute.allCases {
+            XCTAssertEqual(HomeRoute(route.route), route)
         }
     }
 
     @MainActor func testRejectsOrdinaryPaths() {
-        XCTAssertNil(HomyRoute("/Users/example/Documents"))
-        XCTAssertNil(HomyRoute("recents"))
-        XCTAssertNil(HomyRoute("tag:Red"))
-        XCTAssertNil(HomyRoute("cat:unknown"))
+        XCTAssertNil(HomeRoute("/Users/example/Documents"))
+        XCTAssertNil(HomeRoute("recents"))
+        XCTAssertNil(HomeRoute("tag:Red"))
+        XCTAssertNil(HomeRoute("cat:unknown"))
     }
 
     @MainActor func testTitlesAndQueries() {
-        XCTAssertEqual(HomyRoute("cat:images")?.title, "Images")
-        XCTAssertEqual(HomyRoute("smart:large")?.engineQuery, "size:>100mb kind:file")
-        XCTAssertNil(HomyRoute("home")?.engineQuery)
+        XCTAssertEqual(HomeRoute("cat:images")?.title, "Images")
+        XCTAssertEqual(HomeRoute("smart:large")?.engineQuery, "size:>100mb kind:file")
+        XCTAssertNil(HomeRoute("home")?.engineQuery)
     }
 }

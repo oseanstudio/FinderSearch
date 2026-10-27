@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HOMY: Big Folders — a lightweight space map inside Clean Up. One engine
+// HOME: Big Folders — a lightweight space map inside Clean Up. One engine
 // query lists the root's files; their sizes aggregate into per-folder bars
 // you can drill into. Estimates draw from up to 20,000 indexed files.
 
@@ -29,7 +29,7 @@ struct SpaceRow: Identifiable {
         loading = true
         let folder = root
         Task {
-            let reply = try? await HomyServices.shared.engine.request([
+            let reply = try? await HomeServices.shared.engine.request([
                 "q": "kind:file in:" + folder.path, "limit": 20000,
             ])
             guard revision == self.generation else { return }
@@ -70,7 +70,7 @@ struct SpaceRow: Identifiable {
 
 struct BigFoldersCard: View {
     @StateObject private var model = SpaceMapModel()
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
     private let barColors: [Color] = [.blue, .orange, .purple, .green, .pink, .teal]
 
     var body: some View {

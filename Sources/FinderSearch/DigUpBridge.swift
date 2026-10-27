@@ -276,7 +276,7 @@ struct DigUpHit: Identifiable, Decodable, Hashable {
     /// already indexing. An existing DigUp setup needs no re-configuration.
     static func effectiveRoots() -> [String] {
         var seen = Set<String>()
-        let stored = UserDefaults.standard.stringArray(forKey: "homy.digup.roots") ?? []
+        let stored = UserDefaults.standard.stringArray(forKey: "home.digup.roots") ?? []
         return (DigUpSharedSettings.roots + stored)
             .filter { path in
                 var isDirectory: ObjCBool = false
@@ -463,7 +463,7 @@ struct DigUpHit: Identifiable, Decodable, Hashable {
         Task { _ = try? await request(["op": "embed_ahead", "q": text], timeout: 30) }
     }
 
-    /// HOMY: the service's render op — a JPEG of the exact matched PDF page
+    /// HOME: the service's render op — a JPEG of the exact matched PDF page
     /// or video moment, cached beside the index until the service restarts.
     /// Returns nil for kinds it cannot render.
     func render(path: String, kind: String, loc: Double?, pixels: Int) async -> NSImage? {

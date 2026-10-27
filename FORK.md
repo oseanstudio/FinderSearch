@@ -2,7 +2,7 @@
 
 Hearth is this fork's identity: a home for your files with search built
 in. It is a fork of [zeusinsight/FinderSearch](https://github.com/zeusinsight/FinderSearch)
-carrying every feature of [Homy](https://tryhomy.app/) on top of the
+carrying every feature of [Home](https://TRYHOME-URL-PLACEHOLDER/) on top of the
 original app, while staying trivially mergeable with upstream. The app
 ships as `dist/Hearth.app`; internal module and engine names keep their
 upstream `FinderSearch` spelling so merges stay small.
@@ -14,43 +14,43 @@ upstream `FinderSearch` spelling so merges stay small.
 ```
 
 That single command fetches `zeusinsight/FinderSearch`, fast-forwards the
-pristine `main` branch, and merges it into the `homy` branch you work on.
+pristine `main` branch, and merges it into the `home` branch you work on.
 
 | Branch | Purpose |
 |---|---|
 | `main` | Pristine mirror of `upstream/main` — never commit here |
-| `homy` | This fork's features — the branch you build and use |
+| `home` | This fork's features — the branch you build and use |
 
 Remotes: `origin` → `oseanstudio/FinderSearch` (this fork),
 `upstream` → `zeusinsight/FinderSearch`.
 
 ### Why merges stay clean
 
-Every Homy feature lives in its own new file under `Sources/FinderSearch/`
+Every Home feature lives in its own new file under `Sources/FinderSearch/`
 (see the table below). Only three upstream files are touched, each at a
-small marked block that starts with `// HOMY:`:
+small marked block that starts with `// HOME:`:
 
 - `Model.swift` — routes the new sidebar destinations (`home`, `cat:…`,
   `smart:…`, `sources`, `dupes`, `cleanup`) and gives them titles.
-- `Sidebar.swift` — inserts the Homy sidebar sections.
-- `App.swift` — adds the Homy menu, the menu-bar downloads item, and the
+- `Sidebar.swift` — inserts the Home sidebar sections.
+- `App.swift` — adds the Home menu, the menu-bar downloads item, and the
   special-content branch in `fileContent`.
 
 If upstream rewrites those areas, re-adding the marked block is a
 two-line fix; everything else merges untouched.
 
-## Homy feature parity
+## Home feature parity
 
-| Homy feature | Where | Shortcut |
+| Home feature | Where | Shortcut |
 |---|---|---|
 | Home dashboard with category totals and recent shelves | `HomeDashboard.swift` | sidebar → Home |
 | Shelves: Images, Videos, Music, Documents, Archives, Apps | `HomeDashboard.swift`, routes `cat:…` | sidebar |
-| Smart Folders (Large Files, Screenshots) | `HomyCore.swift`, routes `smart:…` | sidebar |
+| Smart Folders (Large Files, Screenshots) | `HomeCore.swift`, routes `smart:…` | sidebar |
 | Pinned folders | upstream Favorites (unchanged) | sidebar |
 | Grid/list views, sorting, resizable cards | upstream views | ⌘1–⌘4 |
 | Quick Look previews | upstream | Space |
 | Built-in music player | `MusicPlayer.swift` | ⌃⌘P, ⌘←/⌘→ |
-| Inspector (dimensions, duration, camera, download source) | `HomyPanels.swift` | ⌥⌘I |
+| Inspector (dimensions, duration, camera, download source) | `HomePanels.swift` | ⌥⌘I |
 | Natural-language search with editable filter chips | `NaturalLanguage.swift` | ⌘F |
 | Search text inside files | fsearch `grep:` filter | add `grep:` or toggle in chips |
 | Saved searches pinned to the sidebar | `NaturalLanguage.swift` | ⌘S while searching |
@@ -60,24 +60,24 @@ two-line fix; everything else merges untouched.
 | Clean Up (old installers, downloads, screenshots, big videos) | `Cleanup.swift` | ⇧⌘K |
 | Quick Search from any app, Spotlight-style | `QuickSearch.swift` | ⇧⌘Space (global) |
 | **Search** — semantic search inside files via [DigUp](https://github.com/ARahim3/DigUp) | `DigUpBridge.swift`, `DigUpSemantic.swift` | ⇧⌘F, sidebar |
-| **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Homy menu, toolbar bell |
+| **Update Center** — alerts + one-click installs for FinderSearch and DigUp releases | `UpdateCenter.swift` | Home menu, toolbar bell |
 | Menu-bar quick search — the menu-bar icon opens a search bar (live results, ↩ opens top hit) plus latest download, free disk space and Quick Search/Updates shortcuts | `MenuBarDownloads.swift` | menu bar |
-| Playful / Minimal themes | `HomyTheme.swift` | ⌃⌘T |
+| Playful / Minimal themes | `HomeTheme.swift` | ⌃⌘T |
 | Quick Look previews in their own resizable window — scroll-wheel zoom at the cursor, middle-drag or drag pan, double-click fits | `QuickLookWindow.swift` | Space |
 | **Custom collections** — named folder groups ("Work" = ~/Projects + ~/Invoices) as a reorderable sidebar section, Home shelves, searchable like categories; create with the sidebar's New Collection… row, manage via right-click | `CollectionsAndRules.swift` | sidebar |
 | **Custom smart folders** — rule builder (kind, size, age, name contains, downloaded from) persisted alongside the built-ins; edit/delete via right-click | `CollectionsAndRules.swift` | sidebar |
 | **Open at the matched spot** — Search results open PDFs at the matched page and video/audio at the matched moment in their own window | `SpotPreview.swift` | double-click |
 | **Big Folders space map** — per-folder size bars with drill-down inside Clean Up | `SpaceMap.swift` | Clean Up |
 | **Finder-style sidebar customization** — drag a section title and it lifts, follows the cursor with an insertion line, and drops into place; right-click any section, row or built-in (Home, Recents, Categories, Smart Folders, Tags, iCloud…) → Remove from Sidebar; **Customize Sidebar…** (right-click or Hearth menu) restores anything, and Reset starts over. Layout persists. | `Sidebar.swift` | drag / right-click |
-| **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomyCore.swift` | ⌘F |
+| **Category-scoped search** — while on an Images/Videos/Documents/… route, the search bar filters within that category | `Model.swift`, `HomeCore.swift` | ⌘F |
 | **Type-select** — typing jumps to filenames by prefix, cycling on repeats | `Model.swift`, `App.swift` | just type |
-| Shortcuts actions (Find Files, Get Latest Download, Search in Homy) | `HomyIntents.swift` | Shortcuts.app |
+| Shortcuts actions (Find Files, Get Latest Download, Search in Home) | `HomeIntents.swift` | Shortcuts.app |
 | Trash-first deletion everywhere | upstream + our tools | ⌫ |
 
 Everything runs locally; the fsearch engine, Vision OCR, and file hashing
 never leave your machine.
 
-Not carried over from Homy: paid licensing/activation (this fork is free,
+Not carried over from Home: paid licensing/activation (this fork is free,
 MIT), Sparkle-style auto-updates (rebuild with `./scripts/build.sh`), and
 the macOS 26-only multi-file drag stack (the system provides it).
 
@@ -114,9 +114,9 @@ Reuse rules (what you asked for):
 The fork checks GitHub every six hours (and on launch) for:
 
 - **zeusinsight/FinderSearch** releases — a toolbar bell shows the count;
-  **Install** merges upstream `main` into `homy` via
+  **Install** merges upstream `main` into `home` via
   `scripts/sync-upstream.sh` and rebuilds with `scripts/build.sh`. Your
-  features live in fork-only files with `// HOMY:`-marked integration
+  features live in fork-only files with `// HOME:`-marked integration
   points, so the merge keeps them; a **Relaunch** button finishes the job.
   `scripts/build.sh` writes the checkout path into the app bundle
   (`Contents/Resources/repo-root`) so the rebuild can find the repo.
@@ -124,8 +124,8 @@ The fork checks GitHub every six hours (and on launch) for:
   upgrades the brew cask when brew manages it, otherwise downloads the
   release DMG into /Applications. Model and index are untouched by both.
 
-Alerts appear as the toolbar badge, a Homy-menu item, and (when the app is
-in the background) a system notification. Manual check: Homy → Check for
+Alerts appear as the toolbar badge, a Home-menu item, and (when the app is
+in the background) a system notification. Manual check: Home → Check for
 Updates…
 
 ## Build

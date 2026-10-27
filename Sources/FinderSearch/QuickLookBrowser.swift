@@ -23,7 +23,7 @@ struct QuickLookBrowser: View {
                     .help(hit.path)
                     Spacer()
                 Text("scroll zooms · drag pans · double-click fits")
-                    .font(.caption2).foregroundStyle(.tertiary)  // HOMY
+                    .font(.caption2).foregroundStyle(.tertiary)  // HOME
                 Text(model.previewPosition).foregroundStyle(.secondary).monospacedDigit()
                 Button("Open") {
                     model.open(hit); model.preview = nil
@@ -31,7 +31,7 @@ struct QuickLookBrowser: View {
                 Button("Done") { model.preview = nil }
             }.padding()
             Divider()
-            // HOMY: zoomable, pannable preview in its own resizable window.
+            // HOME: zoomable, pannable preview in its own resizable window.
             ZoomablePreview(url: hit.url).frame(minWidth: 500, minHeight: 340)
             }
         }
@@ -49,7 +49,7 @@ struct QuickLookBrowser: View {
                 if event.keyCode == 124 || event.keyCode == 125 {
                     model.advancePreview(1); return nil
                 }
-                if event.keyCode == 49 || event.keyCode == 53 {  // HOMY: 53 = Esc, no sheet now
+                if event.keyCode == 49 || event.keyCode == 53 {  // HOME: 53 = Esc, no sheet now
                     model.preview = nil; return nil
                 }
                 return event

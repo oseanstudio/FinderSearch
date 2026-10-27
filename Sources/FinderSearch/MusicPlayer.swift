@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import Combine
 
-// HOMY: Built-in music player. Starts from the selected audio file and plays
+// HOME: Built-in music player. Starts from the selected audio file and plays
 // through the surrounding audio files, with ⌘←/⌘→ to skip.
 
 @MainActor final class MusicPlayerModel: ObservableObject {

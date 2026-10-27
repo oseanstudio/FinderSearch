@@ -2,13 +2,13 @@ import SwiftUI
 import AppKit
 import Combine
 
-// HOMY: keyboard support for the fork's card-based views. A local key
+// HOME: keyboard support for the fork's card-based views. A local key
 // monitor scoped to the browser window: up/down move the highlighted row,
 // Space Quick Looks it, Return opens it. While a text field has focus, only
 // the vertical arrows are taken (they move results, Spotlight-style) and
 // typing passes straight through. Sheets and other routes are left alone.
 
-@MainActor final class HomyKeyNavigator: ObservableObject {
+@MainActor final class HomeKeyNavigator: ObservableObject {
     private var monitor: Any?
     private var isActive: (() -> Bool)?
     private var onMove: ((Int) -> Void)?

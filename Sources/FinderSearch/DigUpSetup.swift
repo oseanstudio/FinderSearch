@@ -273,7 +273,7 @@ struct DigUpInstallState {
 struct DigUpSetupView: View {
     @ObservedObject var setup: DigUpSetupModel
     let onReady: () -> Void
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
 
     var body: some View {
         ScrollView {
@@ -387,12 +387,12 @@ struct DigUpSetupView: View {
 
 @MainActor final class DigUpFoldersModel: ObservableObject {
     @Published var ownRoots: [String] {
-        didSet { UserDefaults.standard.set(ownRoots, forKey: "homy.digup.roots") }
+        didSet { UserDefaults.standard.set(ownRoots, forKey: "home.digup.roots") }
     }
     @Published var digUpRoots: [String] = []
 
     init() {
-        ownRoots = UserDefaults.standard.stringArray(forKey: "homy.digup.roots") ?? []
+        ownRoots = UserDefaults.standard.stringArray(forKey: "home.digup.roots") ?? []
     }
 
     func refresh() {

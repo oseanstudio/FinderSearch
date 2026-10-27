@@ -1,11 +1,11 @@
 import SwiftUI
 import AppKit
 
-// HOMY: This file and its siblings implement the Homy (tryhomy.app) feature
+// HOME: This file and its siblings implement the Home (TRYHOME-URL-PLACEHOLDER) feature
 // set on top of upstream FinderSearch. Integration points in upstream files
-// are marked with `// HOMY:` comments so upstream merges stay small.
+// are marked with `// HOME:` comments so upstream merges stay small.
 
-enum HomyCategory: String, CaseIterable, Identifiable {
+enum HomeCategory: String, CaseIterable, Identifiable {
     case images, videos, music, documents, archives, apps
     var id: String { rawValue }
 
@@ -47,7 +47,7 @@ enum HomyCategory: String, CaseIterable, Identifiable {
     var isAudio: Bool { self == .music }
 }
 
-enum HomySmartFolder: String, CaseIterable, Identifiable {
+enum HomeSmartFolder: String, CaseIterable, Identifiable {
     case large, screenshots
     var id: String { rawValue }
 
@@ -68,21 +68,21 @@ enum HomySmartFolder: String, CaseIterable, Identifiable {
 
 /// Sidebar destinations added by this fork. Routes that carry an engine query
 /// render as a normal file list; the others own their dashboard-style views.
-enum HomyRoute: Equatable, CaseIterable {
+enum HomeRoute: Equatable, CaseIterable {
     case home
     case semantic  // DIGUP: describe-contents search
-    case category(HomyCategory)
-    case smart(HomySmartFolder)
-    case collection(UUID)  // HOMY: user-defined folder group
-    case rule(UUID)  // HOMY: user-defined smart folder
+    case category(HomeCategory)
+    case smart(HomeSmartFolder)
+    case collection(UUID)  // HOME: user-defined folder group
+    case rule(UUID)  // HOME: user-defined smart folder
     case sources
     case duplicates
     case cleanup
 
-    static var allCases: [HomyRoute] {
+    static var allCases: [HomeRoute] {
         [.home, .semantic]
-            + HomyCategory.allCases.map(HomyRoute.category)
-            + HomySmartFolder.allCases.map(HomyRoute.smart)
+            + HomeCategory.allCases.map(HomeRoute.category)
+            + HomeSmartFolder.allCases.map(HomeRoute.smart)
             + [.sources, .duplicates, .cleanup]
     }
 
@@ -94,22 +94,22 @@ enum HomyRoute: Equatable, CaseIterable {
         case "dupes": self = .duplicates
         case "cleanup": self = .cleanup
         default:
-            if route.hasPrefix("cat:"), let category = HomyCategory(
+            if route.hasPrefix("cat:"), let category = HomeCategory(
                 rawValue: String(route.dropFirst(4)))
             {
                 self = .category(category)
-            } else if route.hasPrefix("smart:"), let smart = HomySmartFolder(
+            } else if route.hasPrefix("smart:"), let smart = HomeSmartFolder(
                 rawValue: String(route.dropFirst(6)))
             {
                 self = .smart(smart)
             } else if route.hasPrefix("col:"), let id = UUID(
                 uuidString: String(route.dropFirst(4)))
             {
-                self = .collection(id)  // HOMY
+                self = .collection(id)  // HOME
             } else if route.hasPrefix("rule:"), let id = UUID(
                 uuidString: String(route.dropFirst(5)))
             {
-                self = .rule(id)  // HOMY
+                self = .rule(id)  // HOME
             } else {
                 return nil
             }
@@ -141,9 +141,9 @@ enum HomyRoute: Equatable, CaseIterable {
         case .category(let category): return category.title
         case .smart(let smart): return smart.title
         case .collection(let id):
-            return HomyCollections.shared.items.first { $0.id == id }?.name ?? "Collection"
+            return HomeCollections.shared.items.first { $0.id == id }?.name ?? "Collection"
         case .rule(let id):
-            return HomySmartRules.shared.items.first { $0.id == id }?.name ?? "Smart Folder"
+            return HomeSmartRules.shared.items.first { $0.id == id }?.name ?? "Smart Folder"
         case .sources: return "Downloaded From"
         case .duplicates: return "Duplicates"
         case .cleanup: return "Clean Up"
@@ -171,20 +171,20 @@ enum HomyRoute: Equatable, CaseIterable {
         case .category(let category): return category.query
         case .smart(.large): return "size:>100mb kind:file"
         case .smart(.screenshots): return "Screenshot kind:file"
-        case .rule(let id): return HomySmartRules.shared.query(for: id)
+        case .rule(let id): return HomeSmartRules.shared.query(for: id)
         }
     }
 
-    /// HOMY: routes whose toolbar search filters the route itself.
+    /// HOME: routes whose toolbar search filters the route itself.
     @MainActor var searchFiltersSelf: Bool {
         if case .collection = self { return true }
         return engineQuery != nil
     }
 
-    /// HOMY: a where-from source the results must match (rules only).
+    /// HOME: a where-from source the results must match (rules only).
     @MainActor var sourceFilter: String? {
         if case .rule(let id) = self {
-            return HomySmartRules.shared.items.first { $0.id == id }?.source
+            return HomeSmartRules.shared.items.first { $0.id == id }?.source
         }
         return nil
     }
@@ -227,11 +227,11 @@ extension Hit {
     var isPDF: Bool { url.pathExtension.lowercased() == "pdf" }
 }
 
-/// Shared services for Homy surfaces. HOMY: one stdio engine client for the
-/// whole app — tabs, Homy views, Quick Search and the menu bar all queue on
+/// Shared services for Home surfaces. HOME: one stdio engine client for the
+/// whole app — tabs, Home views, Quick Search and the menu bar all queue on
 /// this instance instead of each spawning their own fsearch process.
-@MainActor final class HomyServices {
-    static let shared = HomyServices()
+@MainActor final class HomeServices {
+    static let shared = HomeServices()
     let engine: Engine = Engine()
     private init() {}
 }
@@ -240,7 +240,7 @@ extension Hit {
 
 /// Home and Search stay pinned at the top; everything below them
 /// is a reorderable section (drag a section's title onto another's).
-struct HomyPinnedSections: View {
+struct HomePinnedSections: View {
     let select: (String) -> Void
     let layout: SidebarLayout
     let selection: String?
@@ -263,7 +263,7 @@ struct HomyPinnedSections: View {
     }
 }
 
-struct HomyCategorySection: View {
+struct HomeCategorySection: View {
     let layout: SidebarLayout
     let selection: String?
     let onSelect: (String) -> Void
@@ -271,7 +271,7 @@ struct HomyCategorySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SidebarSectionHeader(title: "Categories", section: .categories)
-            ForEach(HomyCategory.allCases) { category in
+            ForEach(HomeCategory.allCases) { category in
                 if !layout.isHidden("row:cat:" + category.rawValue) {
                     SidebarItemRow(
                         route: "cat:" + category.rawValue, selection: selection,
@@ -287,7 +287,7 @@ struct HomyCategorySection: View {
     }
 }
 
-struct HomySmartFolderSection: View {
+struct HomeSmartFolderSection: View {
     let layout: SidebarLayout
     let selection: String?
     let onSelect: (String) -> Void
@@ -295,7 +295,7 @@ struct HomySmartFolderSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SidebarSectionHeader(title: "Smart Folders", section: .smartFolders)
-            ForEach(HomySmartFolder.allCases) { smart in
+            ForEach(HomeSmartFolder.allCases) { smart in
                 if !layout.isHidden("row:smart:" + smart.rawValue) {
                     SidebarItemRow(
                         route: "smart:" + smart.rawValue, selection: selection,
@@ -307,12 +307,12 @@ struct HomySmartFolderSection: View {
                     }
                 }
             }
-            HomyUserRulesSection(selection: selection, onSelect: onSelect)  // HOMY
+            HomeUserRulesSection(selection: selection, onSelect: onSelect)  // HOME
         }
     }
 }
 
-struct HomySavedSearchSection: View {
+struct HomeSavedSearchSection: View {
     let select: (String) -> Void
     let selection: String?
     @ObservedObject private var saved = SavedSearches.shared
@@ -340,21 +340,21 @@ struct HomySavedSearchSection: View {
 
 // MARK: - Special content routing
 
-/// Renders the dashboard-style Homy routes inside the browser's detail pane;
+/// Renders the dashboard-style Home routes inside the browser's detail pane;
 /// nil means the route should render upstream's file surfaces.
-struct HomySpecialContent: View {
+struct HomeSpecialContent: View {
     @ObservedObject var model: SearchModel
     @ObservedObject var workspace: BrowserWorkspace
 
     init?(model: SearchModel, workspace: BrowserWorkspace) {
-        guard !model.isSearch, let route = HomyRoute(model.route), route.engineQuery == nil
+        guard !model.isSearch, let route = HomeRoute(model.route), route.engineQuery == nil
         else { return nil }
         self.model = model
         self.workspace = workspace
     }
 
     var body: some View {
-        switch HomyRoute(model.route) {
+        switch HomeRoute(model.route) {
         case .home: HomeDashboard(model: model)
         case .semantic: SemanticSearchView(model: model)  // DIGUP
         case .sources: DownloadedFromView(model: model)
@@ -370,9 +370,9 @@ struct HomySpecialContent: View {
 extension SearchModel {
     /// Category, smart-folder, collection and rule routes fetch through the
     /// shared engine and reuse the model's existing ordering pipeline (hits'
-    /// didSet sorts). HOMY: with a filter, results narrow to names matching
+    /// didSet sorts). HOME: with a filter, results narrow to names matching
     /// the search text — searching *within* the route, not the whole disk.
-    func loadHomy(_ route: HomyRoute, filter: String = "") {
+    func loadHome(_ route: HomeRoute, filter: String = "") {
         // Collections merge one query per member folder instead.
         if case .collection(let id) = route {
             loadCollection(id, filter: filter)
@@ -395,7 +395,7 @@ extension SearchModel {
                 try Task.checkCancellation()
                 var fields: [String: Any] = ["q": engineQuery, "limit": limit]
                 if route != .category(.apps) { fields["in"] = NSHomeDirectory() }
-                let reply = try await HomyServices.shared.engine.request(fields)
+                let reply = try await HomeServices.shared.engine.request(fields)
                 guard reply.ok else {
                     throw Engine.Failure.message(reply.error ?? "Search failed")
                 }
@@ -405,7 +405,7 @@ extension SearchModel {
                 if let source, !source.isEmpty {
                     let fetched = result
                     result = (try? await BackgroundWork.run {
-                        fetched.filter { HomyQuery.matchesSource($0, source: source) }
+                        fetched.filter { HomeQuery.matchesSource($0, source: source) }
                     }) ?? fetched
                 }
                 result = Self.filteredByRoute(result, route: route, filter: filter)
@@ -422,8 +422,8 @@ extension SearchModel {
         }
     }
 
-    /// HOMY: name filtering shared by every engine-backed route search.
-    private static func filteredByRoute(_ hits: [Hit], route: HomyRoute, filter: String) -> [Hit]
+    /// HOME: name filtering shared by every engine-backed route search.
+    private static func filteredByRoute(_ hits: [Hit], route: HomeRoute, filter: String) -> [Hit]
     {
         guard !filter.isEmpty else { return hits }
         let tokens = filter.split(separator: " ").map(String.init)
@@ -432,7 +432,7 @@ extension SearchModel {
         }
     }
 
-    /// HOMY: a collection's files — one concurrent query per member folder,
+    /// HOME: a collection's files — one concurrent query per member folder,
     /// merged, then filtered like any other route.
     private func loadCollection(_ id: UUID, filter: String) {
         generation += 1
@@ -441,10 +441,10 @@ extension SearchModel {
         error = nil
         loading = sortedHits.isEmpty
         searching = !filter.isEmpty
-        let folders = HomyCollections.shared.collection(id)?.folders ?? []
+        let folders = HomeCollections.shared.collection(id)?.folders ?? []
         Task { [weak self] in
             if !filter.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
-            var result = await HomyCollections.files(in: folders, limit: 2000)
+            var result = await HomeCollections.files(in: folders, limit: 2000)
             guard let self, revision == self.generation, !Task.isCancelled else { return }
             result = Self.filteredByRoute(result, route: .collection(id), filter: filter)
             self.elapsed = 0

@@ -1,11 +1,11 @@
 import SwiftUI
 
-// HOMY: Playful / Minimal themes (⌃⌘T), applied to the fork's surfaces while
+// HOME: Playful / Minimal themes (⌃⌘T), applied to the fork's surfaces while
 // upstream views keep the platform voice.
 
-@MainActor final class HomyTheme: ObservableObject {
-    static let shared = HomyTheme()
-    static let key = "homy.theme"
+@MainActor final class HomeTheme: ObservableObject {
+    static let shared = HomeTheme()
+    static let key = "home.theme"
 
     enum Style: String, CaseIterable {
         case playful, minimal

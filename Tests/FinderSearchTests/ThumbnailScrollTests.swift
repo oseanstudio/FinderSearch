@@ -18,7 +18,7 @@ final class ThumbnailScrollTests: XCTestCase {
         let largePixels = ThumbnailSizing.pixels(points: 128, scale: 2)
         XCTAssertEqual(compactPixels, 128)
         XCTAssertEqual(ThumbnailSizing.pixels(points: 64, scale: 1), 64)
-        // HOMY: the fork's icon slider reaches 256 pt, so the cap is 512 px.
+        // HOME: the fork's icon slider reaches 256 pt, so the cap is 512 px.
         XCTAssertEqual(ThumbnailSizing.pixels(points: 500, scale: 2), 512)
         XCTAssertEqual(ThumbnailSizing.pixels(points: 600, scale: 2), 512)
         let small = NSImage(

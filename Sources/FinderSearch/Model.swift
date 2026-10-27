@@ -42,9 +42,9 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         }
     }
     @Published var scope = "" { didSet { if !query.isEmpty { schedule() } } }
-    // HOMY: on category/smart-folder routes, search filters that route by
+    // HOME: on category/smart-folder routes, search filters that route by
     // default; this flag widens the search to the whole disk.
-    @Published var homySearchWholeDisk = false {
+    @Published var homeSearchWholeDisk = false {
         didSet { if isSearch { schedule(immediate: true) } }
     }
     @Published var fileType = "" { didSet { schedule() } }
@@ -127,9 +127,9 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
     private let diskAccessCheck: @Sendable () -> Bool
     private let folderLoader: @Sendable (URL, Bool) async throws -> [Hit]
     private let folderPreviewLoader: @Sendable (URL, Bool) async throws -> [Hit]
-    // HOMY: the default engine is the app-wide shared client (HomyServices).
+    // HOME: the default engine is the app-wide shared client (HomeServices).
     init(
-        engine: any SearchService = HomyServices.shared.engine,
+        engine: any SearchService = HomeServices.shared.engine,
         searchDebounce: Duration = .milliseconds(50),
         diskAccessCheck: @escaping @Sendable () -> Bool = { FullDiskAccess.isGranted() },
         folderLoader: @escaping @Sendable (URL, Bool) async throws -> [Hit] = {
@@ -145,7 +145,7 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         self.folderLoader = folderLoader
         self.folderPreviewLoader = folderPreviewLoader
     }
-    // HOMY: internal for the fork's engine-backed routes (see HomyCore.swift).
+    // HOME: internal for the fork's engine-backed routes (see HomeCore.swift).
     var task: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var mutationError: String?
@@ -221,7 +221,7 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         sortedCache = prepared.ordered
         sorting = false
     }
-    // HOMY: internal so fork routes can invalidate in-flight fetches.
+    // HOME: internal so fork routes can invalidate in-flight fetches.
     var generation = 0
     private var statusStarted = false
     private var watchTask: Task<Void, Never>?
@@ -230,11 +230,11 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
     private var metadata: NSMetadataQuery?
     private var metadataObservers: [NSObjectProtocol] = []
     var canWriteHere: Bool {
-        !isSearch && route != "recents" && !route.hasPrefix("tag:") && HomyRoute(route) == nil  // HOMY
+        !isSearch && route != "recents" && !route.hasPrefix("tag:") && HomeRoute(route) == nil  // HOME
     }
     var isSearch: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var title: String {
-        if let homy = HomyRoute(route) { return homy.title }  // HOMY
+        if let home = HomeRoute(route) { return home.title }  // HOME
         return route == "recents"
             ? "Recents"
             : route.hasPrefix("tag:")
@@ -323,7 +323,7 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         }
         selectionNavigation.send((target, extending))
     }
-    // HOMY: type-select — jump to the next item whose name starts with the
+    // HOME: type-select — jump to the next item whose name starts with the
     // typed prefix, wrapping around the list.
     func selectTypeAhead(_ prefix: String) {
         let items = sortedHits
@@ -389,7 +389,7 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
     func sidebar(_ value: String) {
         guard !busy else { return }
         cancelRename()
-        if value == "recents" || value.hasPrefix("tag:") || HomyRoute(value) != nil {  // HOMY
+        if value == "recents" || value.hasPrefix("tag:") || HomeRoute(value) != nil {  // HOME
             saveDefaultSnapshot(); changingLocation = true
         }
         if value == "recents" {
@@ -397,9 +397,9 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
             changingLocation = false; hits = []; schedule()
         } else if value.hasPrefix("tag:") {
             route = value; scope = ""; query = ""; changingLocation = false; hits = []; schedule()
-        } else if let homy = HomyRoute(value) {  // HOMY
+        } else if let home = HomeRoute(value) {  // HOME
             route = value; scope = ""; query = ""
-            sort = homy.listSort; ascending = homy.listAscending
+            sort = home.listSort; ascending = home.listAscending
             changingLocation = false; hits = []; selection = []; schedule()
         } else {
             navigate(URL(fileURLWithPath: value))
@@ -425,26 +425,26 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
         metadata?.stop(); metadata = nil
         metadataObservers.forEach(NotificationCenter.default.removeObserver)
         metadataObservers = []
-        // HOMY: category, smart-folder and dashboard routes load themselves.
-        if !searchingNow, let homy = HomyRoute(route) {
-            loadHomy(homy); return
+        // HOME: category, smart-folder and dashboard routes load themselves.
+        if !searchingNow, let home = HomeRoute(route) {
+            loadHome(home); return
         }
-        // HOMY: on category, smart-folder, collection and rule routes, search
+        // HOME: on category, smart-folder, collection and rule routes, search
         // filters that route instead of the whole disk — unless the scope
         // control widened it.
-        if searchingNow, let homy = HomyRoute(route), homy.searchFiltersSelf,
-            !homySearchWholeDisk
+        if searchingNow, let home = HomeRoute(route), home.searchFiltersSelf,
+            !homeSearchWholeDisk
         {
-            loadHomy(homy, filter: query); return
+            loadHome(home, filter: query); return
         }
-        let folder = location, hidden = showHidden, text = HomyQuery.translate(query),  // HOMY
+        let folder = location, hidden = showHidden, text = HomeQuery.translate(query),  // HOME
             searchScope = scope, type = fileType
         let recent = route == "recents" && !isSearch
         loading = !searchingNow && !cached; searching = searchingNow
         searchDebouncing = searchingNow && !immediate
         task = Task {
             do {
-                var result: [Hit]  // HOMY: var for source-filtered searches
+                var result: [Hit]  // HOME: var for source-filtered searches
                 if searchingNow || recent {
                     if searchingNow && !immediate {
                         try await Task.sleep(for: searchDebounce)
@@ -469,10 +469,10 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
                         throw Engine.Failure.message(reply.error ?? "Search failed")
                     }
                     result = reply.hits ?? [];
-                    if searchingNow, HomyQuery.hasSourceFilter(query) {  // HOMY
+                    if searchingNow, HomeQuery.hasSourceFilter(query) {  // HOME
                         let fetched = result, raw = query
                         result = (try? await BackgroundWork.run {
-                            HomyQuery.filterBySource(fetched, rawQuery: raw)
+                            HomeQuery.filterBySource(fetched, rawQuery: raw)
                         }) ?? fetched
                     }
                     if revision == generation { elapsed = Double(reply.took_us ?? 0) / 1000 }

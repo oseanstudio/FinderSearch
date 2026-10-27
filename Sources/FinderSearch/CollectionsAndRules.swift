@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HOMY: user-defined sidebar content — Collections (named groups of folders,
+// HOME: user-defined sidebar content — Collections (named groups of folders,
 // e.g. "Work" = ~/Projects + ~/Documents/Invoices) and Smart Folders (rule
 // builder: kind, size, age, name pattern, download source). Both persist in
 // defaults, appear as reorderable sidebar sections, and are searchable just
@@ -9,21 +9,21 @@ import AppKit
 
 // MARK: - Collections
 
-struct HomyCollection: Identifiable, Codable, Equatable {
+struct HomeCollection: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     var folders: [String]
 }
 
-@MainActor final class HomyCollections: ObservableObject {
-    static let shared = HomyCollections()
-    static let key = "homy.collections"
+@MainActor final class HomeCollections: ObservableObject {
+    static let shared = HomeCollections()
+    static let key = "home.collections"
 
-    @Published private(set) var items: [HomyCollection]
+    @Published private(set) var items: [HomeCollection]
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
-            let stored = try? JSONDecoder().decode([HomyCollection].self, from: data)
+            let stored = try? JSONDecoder().decode([HomeCollection].self, from: data)
         {
             items = stored
         } else {
@@ -38,8 +38,8 @@ struct HomyCollection: Identifiable, Codable, Equatable {
     }
 
     @discardableResult
-    func add(name: String) -> HomyCollection {
-        let collection = HomyCollection(id: UUID(), name: name, folders: [])
+    func add(name: String) -> HomeCollection {
+        let collection = HomeCollection(id: UUID(), name: name, folders: [])
         items.append(collection)
         save()
         return collection
@@ -73,19 +73,19 @@ struct HomyCollection: Identifiable, Codable, Equatable {
         save()
     }
 
-    func collection(_ id: UUID) -> HomyCollection? {
+    func collection(_ id: UUID) -> HomeCollection? {
         items.first { $0.id == id }
     }
 
     /// Every file under the collection's folders, merged and newest first.
-    /// HOMY: one engine query per folder, concurrently, deduplicated.
+    /// HOME: one engine query per folder, concurrently, deduplicated.
     static func files(in folders: [String], limit: Int) async -> [Hit] {
         let existing = folders.filter { FileManager.default.fileExists(atPath: $0) }
         guard !existing.isEmpty else { return [] }
         var merged: [Hit] = await withTaskGroup(of: [Hit].self) { group in
             for folder in existing {
                 group.addTask {
-                    let reply = try? await HomyServices.shared.engine.request([
+                    let reply = try? await HomeServices.shared.engine.request([
                         "q": "kind:file in:" + folder, "limit": limit,
                     ])
                     return (reply?.ok == true) ? (reply?.hits ?? []) : []
@@ -119,7 +119,7 @@ struct HomyCollection: Identifiable, Codable, Equatable {
 
 // MARK: - Smart rules
 
-struct HomySmartRule: Identifiable, Codable, Equatable {
+struct HomeSmartRule: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     /// Engine type filter: "", "image", "video", "audio", "doc", "zip", or
@@ -132,15 +132,15 @@ struct HomySmartRule: Identifiable, Codable, Equatable {
     var source: String?
 }
 
-@MainActor final class HomySmartRules: ObservableObject {
-    static let shared = HomySmartRules()
-    static let key = "homy.smartRules"
+@MainActor final class HomeSmartRules: ObservableObject {
+    static let shared = HomeSmartRules()
+    static let key = "home.smartRules"
 
-    @Published private(set) var items: [HomySmartRule]
+    @Published private(set) var items: [HomeSmartRule]
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
-            let stored = try? JSONDecoder().decode([HomySmartRule].self, from: data)
+            let stored = try? JSONDecoder().decode([HomeSmartRule].self, from: data)
         {
             items = stored
         } else {
@@ -155,12 +155,12 @@ struct HomySmartRule: Identifiable, Codable, Equatable {
     }
 
     @discardableResult
-    func add(_ rule: HomySmartRule) {
+    func add(_ rule: HomeSmartRule) {
         items.append(rule)
         save()
     }
 
-    func update(_ rule: HomySmartRule) {
+    func update(_ rule: HomeSmartRule) {
         guard let index = items.firstIndex(where: { $0.id == rule.id }) else { return }
         items[index] = rule
         save()
@@ -171,12 +171,12 @@ struct HomySmartRule: Identifiable, Codable, Equatable {
         save()
     }
 
-    func rule(_ id: UUID) -> HomySmartRule? {
+    func rule(_ id: UUID) -> HomeSmartRule? {
         items.first { $0.id == id }
     }
 
     /// The fsearch query a rule compiles to.
-    static func query(for rule: HomySmartRule) -> String {
+    static func query(for rule: HomeSmartRule) -> String {
         var parts: [String] = []
         if rule.kind == "screenshot" {
             if !rule.namePattern.isEmpty {
@@ -204,10 +204,10 @@ struct HomySmartRule: Identifiable, Codable, Equatable {
 
 // MARK: - Sidebar sections
 
-struct HomyCollectionSection: View {
+struct HomeCollectionSection: View {
     let select: (String) -> Void
     let selection: String?
-    @ObservedObject private var collections = HomyCollections.shared
+    @ObservedObject private var collections = HomeCollections.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -228,8 +228,8 @@ struct HomyCollectionSection: View {
 
     private var newCollectionRow: some View {
         Button {
-            if let name = HomyCollections.promptName(title: "New Collection") {
-                let collection = HomyCollections.shared.add(name: name)
+            if let name = HomeCollections.promptName(title: "New Collection") {
+                let collection = HomeCollections.shared.add(name: name)
                 addFolders(to: collection.id)
             }
         } label: {
@@ -242,26 +242,26 @@ struct HomyCollectionSection: View {
             .padding(.horizontal, 10).padding(.vertical, 4)
     }
 
-    @ViewBuilder private func collectionActions(_ collection: HomyCollection) -> some View {
+    @ViewBuilder private func collectionActions(_ collection: HomeCollection) -> some View {
         Button("Add Folder…") { addFolders(to: collection.id) }
         Button("Rename…") {
-            if let name = HomyCollections.promptName(
+            if let name = HomeCollections.promptName(
                 title: "Rename Collection", initial: collection.name)
             {
-                HomyCollections.shared.rename(collection.id, to: name)
+                HomeCollections.shared.rename(collection.id, to: name)
             }
         }
         Divider()
         ForEach(collection.folders, id: \.self) { path in
             Button("Remove \(URL(fileURLWithPath: path).lastPathComponent)") {
-                HomyCollections.shared.removeFolder(path, from: collection.id)
+                HomeCollections.shared.removeFolder(path, from: collection.id)
             }.disabled(collection.folders.count <= 1)
         }
         if !collection.folders.isEmpty {
             Divider()
         }
         Button("Delete Collection", role: .destructive) {
-            HomyCollections.shared.remove(collection.id)
+            HomeCollections.shared.remove(collection.id)
         }
     }
 
@@ -272,17 +272,17 @@ struct HomyCollectionSection: View {
         panel.allowsMultipleSelection = true
         panel.prompt = "Add"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        HomyCollections.shared.addFolders(panel.urls, to: id)
+        HomeCollections.shared.addFolders(panel.urls, to: id)
     }
 }
 
-/// HOMY: user rules render under the built-in Smart Folders, plus the row
+/// HOME: user rules render under the built-in Smart Folders, plus the row
 /// that opens the rule builder.
-struct HomyUserRulesSection: View {
+struct HomeUserRulesSection: View {
     let selection: String?
     let onSelect: (String) -> Void
-    @ObservedObject private var rules = HomySmartRules.shared
-    @State private var editingRule: HomySmartRule?
+    @ObservedObject private var rules = HomeSmartRules.shared
+    @State private var editingRule: HomeSmartRule?
     @State private var showBuilder = false
 
     var body: some View {
@@ -321,7 +321,7 @@ struct HomyUserRulesSection: View {
 
 struct SmartRuleSheet: View {
     /// nil builds a new rule; otherwise the rule is edited in place.
-    let rule: HomySmartRule?
+    let rule: HomeSmartRule?
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
@@ -380,7 +380,7 @@ struct SmartRuleSheet: View {
             .onAppear { if let rule { load(rule) } }
     }
 
-    private func load(_ rule: HomySmartRule) {
+    private func load(_ rule: HomeSmartRule) {
         name = rule.name
         kind = rule.kind
         useSize = rule.minSizeMB != nil
@@ -393,7 +393,7 @@ struct SmartRuleSheet: View {
     }
 
     private func save() {
-        let built = HomySmartRule(
+        let built = HomeSmartRule(
             id: rule?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespaces),
             kind: kind,
@@ -404,9 +404,9 @@ struct SmartRuleSheet: View {
             source: source.trimmingCharacters(in: .whitespaces).isEmpty
                 ? nil : source.trimmingCharacters(in: .whitespaces))
         if rule == nil {
-            HomySmartRules.shared.add(built)
+            HomeSmartRules.shared.add(built)
         } else {
-            HomySmartRules.shared.update(built)
+            HomeSmartRules.shared.update(built)
         }
         dismiss()
     }

@@ -1,6 +1,6 @@
 import AppKit
 
-// HOMY: Hearth's icon, drawn programmatically — a warm tile, a white house,
+// HOME: Hearth's icon, drawn programmatically — a warm tile, a white house,
 // and a magnifying glass for a door: a home for your files with search built
 // in. Usage: render-hearth-icon.swift output.png size
 

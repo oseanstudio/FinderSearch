@@ -2,7 +2,7 @@ import XCTest
 import AppKit
 @testable import FinderSearch
 
-// HOMY: the duplicates scanner must find byte-identical files by hash, stay
+// HOME: the duplicates scanner must find byte-identical files by hash, stay
 // responsive to cancellation, and never touch the main actor.
 
 final class DuplicateScannerTests: XCTestCase {

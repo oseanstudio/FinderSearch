@@ -1,10 +1,10 @@
 import SwiftUI
 
-// HOMY: The Homy menu — one place for every feature the fork adds.
+// HOME: The Home menu — one place for every feature the fork adds.
 
-struct HomyCommandMenu: View {
+struct HomeCommandMenu: View {
     let model: SearchModel?
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
 
     private var ocrTargets: [Hit] {
         (model?.selectedItems ?? []).filter(TextRecognition.supported)
@@ -34,11 +34,11 @@ struct HomyCommandMenu: View {
             .keyboardShortcut("k", modifiers: [.command, .shift])
             .disabled(model?.busy != false)
         Divider()
-        Button("Text in Images…") { HomyPanels.shared.showOCR(ocrTargets) }
+        Button("Text in Images…") { HomePanels.shared.showOCR(ocrTargets) }
             .keyboardShortcut("c", modifiers: [.command, .shift])
             .disabled(ocrTargets.isEmpty)
         Button("Inspector") {
-            if let hit = model?.selected { HomyPanels.shared.showInspector(hit) }
+            if let hit = model?.selected { HomePanels.shared.showInspector(hit) }
         }
         .keyboardShortcut("i", modifiers: [.command, .option])
         .disabled(model?.selection.isEmpty != false)
@@ -55,20 +55,20 @@ struct HomyCommandMenu: View {
         .disabled(audioTargets.isEmpty)
         Divider()
         Button("Save Search…") {
-            if let model { HomyPanels.shared.showSaveSearch(model) }
+            if let model { HomePanels.shared.showSaveSearch(model) }
         }
         .keyboardShortcut("s")
         .disabled(model?.isSearch != true)
         Divider()
         Picker("Theme", selection: $theme.style) {
-            ForEach(HomyTheme.Style.allCases, id: \.self) { style in
+            ForEach(HomeTheme.Style.allCases, id: \.self) { style in
                 Text(style.title).tag(style)
             }
         }
         Button("Switch Theme") { theme.toggle() }
             .keyboardShortcut("t", modifiers: [.command, .control])
         Divider()
-        Button("Customize Sidebar…") {  // HOMY
+        Button("Customize Sidebar…") {  // HOME
             NotificationCenter.default.post(name: SidebarLayout.customize, object: nil)
         }
         Button("Reset Sidebar") {
@@ -76,18 +76,18 @@ struct HomyCommandMenu: View {
             layout.reset()
             layout.save()
         }
-        Button("Check for Updates…") {  // HOMY
-            NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
+        Button("Check for Updates…") {  // HOME
+            NotificationCenter.default.post(name: .homeShowUpdates, object: nil)
         }
     }
 }
 
 extension Notification.Name {
-    static let homySaveSearch = Notification.Name("homy.saveSearch")
+    static let homeSaveSearch = Notification.Name("home.saveSearch")
 }
 
 /// Panel form of the save-search field, driven from the ⌘S command.
-struct HomySaveSearchPanel: View {
+struct HomeSaveSearchPanel: View {
     let query: String
     @State private var name = ""
 
@@ -107,7 +107,7 @@ struct HomySaveSearchPanel: View {
             }
         }.padding(16).frame(width: 320)
             .onAppear {
-                let parsed = HomyQuery.parse(query)
+                let parsed = HomeQuery.parse(query)
                 name = parsed.chipLabels.map { "\($0.field) \($0.value)" }
                     .joined(separator: ", ")
                 if name.isEmpty { name = query }

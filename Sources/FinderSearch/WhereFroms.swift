@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HOMY: "Downloaded From" — reads macOS's kMDItemWhereFroms extended attribute
+// HOME: "Downloaded From" — reads macOS's kMDItemWhereFroms extended attribute
 // (written by browsers and most downloaders) and groups files by their source.
 
 enum WhereFroms {
@@ -131,7 +131,7 @@ struct DownloadSourceGroup: Identifiable {
 struct DownloadedFromView: View {
     @ObservedObject var model: SearchModel
     @StateObject private var data = DownloadedFromModel()
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
     private let downloads = URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
 
     var body: some View {
@@ -192,7 +192,7 @@ struct DownloadedFromView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(group.visibleFiles) { hit in
-                                    HomyFileCard(hit: hit)
+                                    HomeFileCard(hit: hit)
                                 }
                                 if group.hiddenCount > 0 {
                                     Text("+\(group.hiddenCount) more")

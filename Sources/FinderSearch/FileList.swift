@@ -51,7 +51,7 @@ import Combine
             return coordinator.items[row].path
         }
         table.addSubview(marquee)
-        // HOMY: type-select and search-result jumps scroll the table too.
+        // HOME: type-select and search-result jumps scroll the table too.
         coordinator.navigationSubscriber = model.selectionNavigation.sink {
             [weak coordinator] request in
             Task { @MainActor in coordinator?.scrollToPath(request.path) }
@@ -78,9 +78,9 @@ import Combine
         private weak var renameField: RenameTextField?
         private var actions: [Int: @MainActor () -> Void] = [:]
         var scrollObserver: NSObjectProtocol?
-        var navigationSubscriber: AnyCancellable?  // HOMY
+        var navigationSubscriber: AnyCancellable?  // HOME
 
-        /// HOMY: bring a navigated-to row into view without touching the
+        /// HOME: bring a navigated-to row into view without touching the
         /// user's scroll position otherwise.
         func scrollToPath(_ path: String) {
             guard let table, let row = rowByPath[path] else { return }

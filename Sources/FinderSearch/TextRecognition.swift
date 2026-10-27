@@ -3,7 +3,7 @@ import AppKit
 import Vision
 import PDFKit
 
-// HOMY: Text in images — on-device OCR via the Vision framework for selected
+// HOME: Text in images — on-device OCR via the Vision framework for selected
 // screenshots, photos and PDFs, with copy-to-clipboard output.
 
 enum TextRecognition {
@@ -57,7 +57,7 @@ enum TextRecognition {
         return pages.isEmpty ? nil : pages.joined(separator: "\n\n")
     }
 
-    /// Everything Homy's ⇧⌘C accepts: images and PDFs.
+    /// Everything Home's ⇧⌘C accepts: images and PDFs.
     static func supported(_ hit: Hit) -> Bool {
         hit.kind == "file" && (hit.isImageFile || hit.isPDF)
     }

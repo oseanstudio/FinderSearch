@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// HOMY: the menu-bar icon opens a compact panel, not a list of files: a
+// HOME: the menu-bar icon opens a compact panel, not a list of files: a
 // search bar that searches this Mac from anywhere, one glance row (the
 // latest download), free disk space, and a small footer. The old
 // ten-download list is gone — files belong in the browser.
@@ -29,8 +29,8 @@ import AppKit
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled, revision == generation else { return }
             do {
-                let reply = try await HomyServices.shared.engine.request([
-                    "q": HomyQuery.translate(text), "limit": 6,
+                let reply = try await HomeServices.shared.engine.request([
+                    "q": HomeQuery.translate(text), "limit": 6,
                 ])
                 guard revision == generation, !Task.isCancelled else { return }
                 results = reply.ok ? (reply.hits ?? []) : []
@@ -92,7 +92,7 @@ import AppKit
     }
 }
 
-/// HOMY: full-width menu row with a hover highlight, like a real menu item.
+/// HOME: full-width menu row with a hover highlight, like a real menu item.
 private struct MenuRowStyle: ButtonStyle {
     var tint = Color.primary
     @State private var hovering = false
@@ -249,7 +249,7 @@ struct MenuBarDownloadsView: View {
                 highlight: !updates.offers.isEmpty
             ) {
                 NSApp.activate(ignoringOtherApps: true)
-                NotificationCenter.default.post(name: .homyShowUpdates, object: nil)
+                NotificationCenter.default.post(name: .homeShowUpdates, object: nil)
                 Self.closeMenu()
             }
             Divider()

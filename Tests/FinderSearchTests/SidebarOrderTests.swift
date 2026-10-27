@@ -1,7 +1,7 @@
 import XCTest
 @testable import FinderSearch
 
-// HOMY: type-select, category-scoped search filtering, and sidebar section
+// HOME: type-select, category-scoped search filtering, and sidebar section
 // ordering.
 
 final class TypeSelectTests: XCTestCase {

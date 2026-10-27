@@ -1,31 +1,31 @@
 import SwiftUI
 import AppKit
 
-// HOMY: Home dashboard — category totals, shelves of recent files, and quick
-// links into Clean Up and Duplicates, mirroring Homy's home screen.
+// HOME: Home dashboard — category totals, shelves of recent files, and quick
+// links into Clean Up and Duplicates, mirroring Home's home screen.
 
-struct HomyShelf: Identifiable {
-    let category: HomyCategory
+struct HomeShelf: Identifiable {
+    let category: HomeCategory
     let files: [Hit]
     var id: String { category.rawValue }
 }
 
-/// HOMY: one user collection's recent files on the Home dashboard.
-struct HomyCollectionShelf: Identifiable {
+/// HOME: one user collection's recent files on the Home dashboard.
+struct HomeCollectionShelf: Identifiable {
     let id: UUID
     let name: String
     let files: [Hit]
 }
 
 @MainActor final class HomeDashboardModel: ObservableObject {
-    @Published var counts: [HomyCategory: Int] = [:]
-    @Published var countOverflow: Set<HomyCategory> = []
-    @Published var shelves: [HomyShelf] = []
-    @Published var collectionShelves: [HomyCollectionShelf] = []
+    @Published var counts: [HomeCategory: Int] = [:]
+    @Published var countOverflow: Set<HomeCategory> = []
+    @Published var shelves: [HomeShelf] = []
+    @Published var collectionShelves: [HomeCollectionShelf] = []
     @Published var loading = true
     @Published var failed = false
     private var generation = 0
-    // HOMY: results are cached for a few minutes so revisiting Home is
+    // HOME: results are cached for a few minutes so revisiting Home is
     // instant; pull-to-refresh or visiting after a change forces a reload.
     private var lastLoaded: Date?
     private static let cacheTTL: TimeInterval = 300
@@ -35,7 +35,7 @@ struct HomyCollectionShelf: Identifiable {
         return Date().timeIntervalSince(lastLoaded) > Self.cacheTTL || counts.isEmpty
     }
 
-    private static let shelfCategories: [HomyCategory] = [.images, .videos, .documents, .music]
+    private static let shelfCategories: [HomeCategory] = [.images, .videos, .documents, .music]
     private static let shelfLimit = 14
     private static let countLimit = 1000
 
@@ -44,12 +44,12 @@ struct HomyCollectionShelf: Identifiable {
         generation += 1
         let revision = generation
         failed = false
-        let collections = HomyCollections.shared.items
-        var newCounts: [HomyCategory: Int] = [:]
-        var overflow: Set<HomyCategory> = []
-        var newShelves: [HomyShelf] = []
-        await withTaskGroup(of: (HomyCategory, Int, Bool, [Hit]).self) { group in
-            for category in HomyCategory.allCases {
+        let collections = HomeCollections.shared.items
+        var newCounts: [HomeCategory: Int] = [:]
+        var overflow: Set<HomeCategory> = []
+        var newShelves: [HomeShelf] = []
+        await withTaskGroup(of: (HomeCategory, Int, Bool, [Hit]).self) { group in
+            for category in HomeCategory.allCases {
                 group.addTask {
                     await self.fetch(category: category)
                 }
@@ -59,7 +59,7 @@ struct HomyCollectionShelf: Identifiable {
                 if hitCap { overflow.insert(category) }
                 if !files.isEmpty {
                     newShelves.append(
-                        HomyShelf(category: category, files: files.sorted { $0.mtime > $1.mtime }))
+                        HomeShelf(category: category, files: files.sorted { $0.mtime > $1.mtime }))
                 }
             }
         }
@@ -71,17 +71,17 @@ struct HomyCollectionShelf: Identifiable {
             newShelves.first { $0.category == category }
         }
         collectionShelves = await withTaskGroup(
-            of: HomyCollectionShelf.self
+            of: HomeCollectionShelf.self
         ) { group in
             for collection in collections {
                 group.addTask {
-                    let files = await HomyCollections.files(
+                    let files = await HomeCollections.files(
                         in: collection.folders, limit: Self.shelfLimit)
-                    return HomyCollectionShelf(
+                    return HomeCollectionShelf(
                         id: collection.id, name: collection.name, files: files)
                 }
             }
-            var result: [HomyCollectionShelf] = []
+            var result: [HomeCollectionShelf] = []
             for await shelf in group where !shelf.files.isEmpty { result.append(shelf) }
             return result
         }
@@ -90,16 +90,16 @@ struct HomyCollectionShelf: Identifiable {
         lastLoaded = Date()
     }
 
-    private func fetch(category: HomyCategory) async -> (HomyCategory, Int, Bool, [Hit]) {
+    private func fetch(category: HomeCategory) async -> (HomeCategory, Int, Bool, [Hit]) {
         let query = category.query + " in:" + NSHomeDirectory()
-        let reply = try? await HomyServices.shared.engine.request([
+        let reply = try? await HomeServices.shared.engine.request([
             "q": query, "limit": Self.shelfLimit,
         ])
         var count = reply?.hits?.count ?? 0
         var capped = false
         if count >= Self.shelfLimit {
             capped = true
-            let counted = try? await HomyServices.shared.engine.request([
+            let counted = try? await HomeServices.shared.engine.request([
                 "q": query, "limit": Self.countLimit,
             ])
             count = counted?.hits?.count ?? 0
@@ -112,7 +112,7 @@ struct HomyCollectionShelf: Identifiable {
 struct HomeDashboard: View {
     @ObservedObject var model: SearchModel
     @StateObject private var dashboard = HomeDashboardModel()
-    @ObservedObject private var theme = HomyTheme.shared
+    @ObservedObject private var theme = HomeTheme.shared
 
     var body: some View {
         ScrollView {
@@ -123,7 +123,7 @@ struct HomeDashboard: View {
                 ForEach(dashboard.shelves) { shelf in
                     shelfSection(shelf)
                 }
-                ForEach(dashboard.collectionShelves) { shelf in  // HOMY
+                ForEach(dashboard.collectionShelves) { shelf in  // HOME
                     collectionShelfSection(shelf)
                 }
                 if dashboard.loading && dashboard.shelves.isEmpty {
@@ -163,7 +163,7 @@ struct HomeDashboard: View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12
         ) {
-            ForEach(HomyCategory.allCases) { category in
+            ForEach(HomeCategory.allCases) { category in
                 Button {
                     model.sidebar("cat:" + category.rawValue)
                 } label: {
@@ -190,7 +190,7 @@ struct HomeDashboard: View {
         }
     }
 
-    private func countLabel(_ category: HomyCategory) -> String {
+    private func countLabel(_ category: HomeCategory) -> String {
         guard let count = dashboard.counts[category] else { return "—" }
         if dashboard.countOverflow.contains(category) { return "\(count)+ items" }
         return count == 1 ? "1 item" : "\(count) items"
@@ -228,8 +228,8 @@ struct HomeDashboard: View {
         }.buttonStyle(.plain)
     }
 
-    // HOMY: a user collection's recent files.
-    private func collectionShelfSection(_ shelf: HomyCollectionShelf) -> some View {
+    // HOME: a user collection's recent files.
+    private func collectionShelfSection(_ shelf: HomeCollectionShelf) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(shelf.name, systemImage: "square.stack.3d.up")
@@ -242,7 +242,7 @@ struct HomeDashboard: View {
         }
     }
 
-    private func shelfSection(_ shelf: HomyShelf) -> some View {
+    private func shelfSection(_ shelf: HomeShelf) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(shelf.category.title, systemImage: shelf.category.symbol)
@@ -257,8 +257,8 @@ struct HomeDashboard: View {
 }
 
 /// A thumbnail card for shelves and dashboard surfaces: click to open,
-/// context menu for the common Homy actions.
-struct HomyFileCard: View {
+/// context menu for the common Home actions.
+struct HomeFileCard: View {
     let hit: Hit
     var size: Double = 86
 
@@ -275,8 +275,8 @@ struct HomyFileCard: View {
                 .font(.caption2).foregroundStyle(.tertiary)
         }.padding(6)
             .background(
-                RoundedRectangle(cornerRadius: HomyTheme.shared.cardRadius)
-                    .fill(HomyTheme.shared.cardFill))
+                RoundedRectangle(cornerRadius: HomeTheme.shared.cardRadius)
+                    .fill(HomeTheme.shared.cardFill))
             .contentShape(Rectangle())
             .onTapGesture { hit.url.openInWorkspace() }
             .contextMenu {
@@ -302,7 +302,7 @@ extension URL {
 }
 
 
-/// HOMY: a full-bleed horizontal shelf with Finder-style arrows. The strip
+/// HOME: a full-bleed horizontal shelf with Finder-style arrows. The strip
 /// runs edge to edge; the chevrons step one card per click and auto-repeat
 /// while held down.
 struct ShelfStrip: View {
@@ -315,7 +315,7 @@ struct ShelfStrip: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(Array(files.enumerated()), id: \.offset) { index, hit in
-                            HomyFileCard(hit: hit)
+                            HomeFileCard(hit: hit)
                                 .id(index)
                         }
                     }
@@ -361,7 +361,7 @@ struct ShelfStrip: View {
     }
 }
 
-/// HOMY: a round chevron that steps on click and keeps stepping while held.
+/// HOME: a round chevron that steps on click and keeps stepping while held.
 private struct ShelfArrow: View {
     let system: String
     let step: () -> Void

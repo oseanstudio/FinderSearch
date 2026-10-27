@@ -21,14 +21,14 @@ fi
 cargo build --release --locked --manifest-path vendor/fsearch/Cargo.toml --target-dir vendor/fsearch/target
 swift build -c release
 swift_bin="$(swift build -c release --show-bin-path)"
-# HOMY: the fork ships as Hearth.
+# HOME: the fork ships as Hearth.
 app="$PWD/dist/Hearth.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/Resources"
 ./scripts/build-icon.sh "$app/Contents/Resources/AppIcon.icns"
 cp "$swift_bin/FinderSearch" "$app/Contents/MacOS/Hearth"
 cp vendor/fsearch/target/release/fsearch "$app/Contents/Helpers/"
 cp vendor/fsearch/LICENSE "$app/Contents/Resources/fsearch-LICENSE"
-# HOMY: the update center rebuilds from this checkout when upstream ships a release.
+# HOME: the update center rebuilds from this checkout when upstream ships a release.
 printf '%s\n' "$PWD" > "$app/Contents/Resources/repo-root"
 if [[ -f LICENSE ]]; then
     cp LICENSE "$app/Contents/Resources/FinderSearch-LICENSE"
