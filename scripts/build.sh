@@ -55,3 +55,18 @@ codesign --verify --deep --strict "$app"
 # Launch Services notices updated bundles by their directory modification time.
 touch "$app"
 printf 'Built %s\n' "$app"
+
+# HOME: every build lands in /Applications so Full Disk Access, Launch Services
+# and the update center keep pointing at the installed copy; dist/ stays as
+# the raw build output. The bundle id is stable, so settings survive.
+dest=/Applications/Hearth.app
+if [[ -d /Applications && -w /Applications ]]; then
+    pkill -x Hearth 2>/dev/null || true
+    sleep 0.5
+    rm -rf "$dest"
+    ditto "$app" "$dest"
+    touch "$dest"
+    printf 'Installed %s\n' "$dest"
+else
+    print -u2 'Skipped the /Applications install (directory not writable); the build remains at dist/Hearth.app'
+fi

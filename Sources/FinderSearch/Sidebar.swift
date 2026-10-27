@@ -150,10 +150,11 @@ struct SidebarLayout: Codable, Equatable {
     }
 }
 
-/// HOME: Finder-style drag for section titles. An AppKit event catcher under
-/// each title consumes the mouse events before the List's selection machinery
-/// can react, so dragging never changes the active location. Coordinates live
-/// in the reference box's space (anchored to the whole sidebar, y-up).
+/// HOME: Finder-style drag for section titles. All geometry lives in window
+/// coordinates (AppKit, y-up): event points come straight from
+/// `event.locationInWindow`, header frames from `convert(bounds, to: nil)`, so
+/// scrolling or SwiftUI relayout cannot desync the lift preview from the
+/// cursor. Every mounted catcher re-reports its frame when a drag begins.
 @MainActor final class SidebarDragCoordinator: ObservableObject {
     static let shared = SidebarDragCoordinator()
 
@@ -165,26 +166,40 @@ struct SidebarLayout: Codable, Equatable {
     }
 
     @Published var session: Session?
-    @Published var frames: [SidebarSection: CGRect] = [:]
+    @Published var frames: [SidebarSection: CGRect] = [:]  // window coords, y-up
+    private var catchers: [ObjectIdentifier: SidebarDragCatcher] = [:]
+
+    func register(_ catcher: SidebarDragCatcher) {
+        catchers[ObjectIdentifier(catcher)] = catcher
+    }
+
+    func unregister(_ catcher: SidebarDragCatcher) {
+        catchers[ObjectIdentifier(catcher)] = nil
+    }
 
     func reportFrame(_ section: SidebarSection, _ frame: CGRect) {
         if frames[section] != frame { frames[section] = frame }
     }
 
-    func dragged(to point: CGPoint, section: SidebarSection) {
-        if session == nil {
-            guard let frame = frames[section] else { return }
-            session = Session(
-                section: section,
-                grabOffset: CGPoint(x: point.x - frame.minX, y: point.y - frame.minY),
-                location: point, slot: 0)
-        }
+    func begin(section: SidebarSection, locationInWindow point: CGPoint) {
+        // Frames captured before the last scroll or relayout are stale.
+        catchers.values.forEach { $0.reportFrame() }
+        guard let frame = frames[section] else { return }
+        session = Session(
+            section: section,
+            grabOffset: CGPoint(x: point.x - frame.minX, y: point.y - frame.minY),
+            location: point, slot: 0)
+        moved(locationInWindow: point)
+    }
+
+    func moved(locationInWindow point: CGPoint) {
+        guard session != nil else { return }
         session?.location = point
-        session?.slot = slot(at: point, dragged: section)
+        session?.slot = slot(at: point, dragged: session!.section)
     }
 
     /// How many of the other visible section titles sit above the point
-    /// (larger y in the reference space means higher on screen).
+    /// (larger y in window space means higher on screen).
     private func slot(at point: CGPoint, dragged: SidebarSection) -> Int {
         let others = SidebarLayout.load().visibleSections.filter { $0 != dragged }
         return others.filter { section in
@@ -205,29 +220,34 @@ struct SidebarLayout: Codable, Equatable {
     }
 }
 
-/// HOME: an invisible view anchoring the sidebar-wide coordinate space that
-/// drag events and header frames share.
-final class SidebarReferenceBox: NSView {
-    static weak var current: SidebarReferenceBox?
+/// HOME: a flipped anchor covering the drag overlay's area. It converts the
+/// coordinator's window-coordinate geometry into the overlay's top-left-origin
+/// drawing space, matching how SwiftUI positions views.
+final class SidebarOverlayBox: NSView {
+    static weak var current: SidebarOverlayBox?
+    override var isFlipped: Bool { true }
 }
 
-struct SidebarSpaceAnchor: NSViewRepresentable {
-    func makeNSView(context: Context) -> SidebarReferenceBox {
-        let view = SidebarReferenceBox()
-        SidebarReferenceBox.current = view
+struct SidebarOverlayAnchor: NSViewRepresentable {
+    func makeNSView(context: Context) -> SidebarOverlayBox {
+        let view = SidebarOverlayBox()
+        SidebarOverlayBox.current = view
         return view
     }
 
-    func updateNSView(_ view: SidebarReferenceBox, context: Context) {}
+    func updateNSView(_ view: SidebarOverlayBox, context: Context) {
+        SidebarOverlayBox.current = view
+    }
 }
 
 /// HOME: consumes the header's mouse events so the List never turns a drag
-/// into a selection change; reports its frame and drives the coordinator.
+/// into a selection change; reports its window-space frame and drives the
+/// coordinator directly in window coordinates.
 final class SidebarDragCatcher: NSView {
     var section: SidebarSection
     private var pressing = false
     private var dragging = false
-    private var startScreen = NSPoint.zero
+    private var startWindow = NSPoint.zero
 
     init(section: SidebarSection) {
         self.section = section
@@ -237,13 +257,18 @@ final class SidebarDragCatcher: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    private func reportFrame() {
-        guard let reference = SidebarReferenceBox.current else { return }
-        SidebarDragCoordinator.shared.reportFrame(section, convert(bounds, to: reference))
+    func reportFrame() {
+        guard window != nil else { return }
+        SidebarDragCoordinator.shared.reportFrame(section, convert(bounds, to: nil))
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil {
+            SidebarDragCoordinator.shared.register(self)
+        } else {
+            SidebarDragCoordinator.shared.unregister(self)
+        }
         reportFrame()
     }
 
@@ -255,24 +280,19 @@ final class SidebarDragCatcher: NSView {
     override func mouseDown(with event: NSEvent) {
         pressing = true
         dragging = false
-        startScreen = NSEvent.mouseLocation
+        startWindow = event.locationInWindow
         reportFrame()
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard pressing else { return }
-        let screen = NSEvent.mouseLocation
+        let point = event.locationInWindow
         if !dragging {
-            guard hypot(screen.x - startScreen.x, screen.y - startScreen.y) > 3 else { return }
+            guard hypot(point.x - startWindow.x, point.y - startWindow.y) > 3 else { return }
             dragging = true
+            SidebarDragCoordinator.shared.begin(section: section, locationInWindow: point)
         }
-        guard
-            let reference = SidebarReferenceBox.current,
-            window != nil
-        else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        let referencePoint = convert(point, to: reference)
-        SidebarDragCoordinator.shared.dragged(to: referencePoint, section: section)
+        SidebarDragCoordinator.shared.moved(locationInWindow: point)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -436,7 +456,6 @@ struct BrowserSidebar: View, Equatable {
                     .padding(4).allowsHitTesting(false)
             }
         }
-        .background(SidebarSpaceAnchor())  // HOME: shared drag coordinate space
         .overlay {
             SidebarDragOverlay()  // HOME
                 .allowsHitTesting(false)
@@ -688,32 +707,34 @@ struct SidebarDragOverlay: View {
     @ObservedObject private var drag = SidebarDragCoordinator.shared
 
     var body: some View {
-        GeometryReader { geo in
-            let height = geo.size.height
-            Group {
-                if let session = drag.session {
-                    insertionLine(session, height: height)
-                    liftPreview(session, height: height)
-                }
+        ZStack {
+            SidebarOverlayAnchor()
+            if let session = drag.session {
+                insertionLine(session)
+                liftPreview(session)
             }
-        }.allowsHitTesting(false)
+        }
+        .allowsHitTesting(false)
     }
 
-    private func local(_ rect: CGRect, height: CGFloat) -> CGRect {
-        CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
+    /// Window coords (y-up) → overlay-local coords (top-left origin) via the
+    /// flipped anchor, so the conversion can never disagree with where
+    /// SwiftUI actually drew the anchor.
+    private func local(_ rect: CGRect) -> CGRect {
+        SidebarOverlayBox.current?.convert(rect, from: nil) ?? rect
     }
 
-    private func local(_ point: CGPoint, height: CGFloat) -> CGPoint {
-        CGPoint(x: point.x, y: height - point.y)
+    private func local(_ point: CGPoint) -> CGPoint {
+        SidebarOverlayBox.current?.convert(point, from: nil) ?? point
     }
 
     /// Accent line at the boundary the section would land at.
     @ViewBuilder private func insertionLine(
-        _ session: SidebarDragCoordinator.Session, height: CGFloat
+        _ session: SidebarDragCoordinator.Session
     ) -> some View {
         let layout = SidebarLayout.load()
         let others = layout.visibleSections.filter { $0 != session.section }
-        // In reference space (y-up), visual top-to-bottom is descending midY.
+        // In window space (y-up), visual top-to-bottom is descending midY.
         let ordered = others.compactMap { drag.frames[$0] }.sorted { $0.midY > $1.midY }
         let line: CGRect? = {
             guard !ordered.isEmpty else { return nil }
@@ -727,7 +748,7 @@ struct SidebarDragOverlay: View {
                 x: frame.minX, y: frame.minY - 1.5, width: frame.width + 60, height: 3)
         }()
         if let line {
-            let localRect = local(line, height: height)
+            let localRect = local(line)
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(Color.accentColor)
                 .frame(width: localRect.width, height: localRect.height)
@@ -738,13 +759,13 @@ struct SidebarDragOverlay: View {
 
     /// The lifted title following the cursor.
     @ViewBuilder private func liftPreview(
-        _ session: SidebarDragCoordinator.Session, height: CGFloat
+        _ session: SidebarDragCoordinator.Session
     ) -> some View {
         if let frame = drag.frames[session.section] {
             let center = CGPoint(
                 x: session.location.x - session.grabOffset.x + frame.width / 2,
                 y: session.location.y - session.grabOffset.y + frame.height / 2)
-            let localCenter = local(center, height: height)
+            let localCenter = local(center)
             HStack(spacing: 4) {
                 Text(session.section.title)
                 Image(systemName: "line.3.horizontal")
