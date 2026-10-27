@@ -252,10 +252,20 @@ struct BrowserView: View {
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
                 }
+                // HOME: native search field that lives in the toolbar row;
+                // see ToolbarSearchField for why .searchable can't be used.
+                ToolbarItem {
+                    ToolbarSearchField(
+                        text: $model.query,
+                        focused: Binding(
+                            get: { keyboardFocus == .search },
+                            set: { keyboardFocus = $0 ? .search : nil }
+                        ),
+                        onSubmit: { model.submitSearch() }
+                    )
+                    .frame(width: 210, height: 24)
+                }
             }
-            .searchable(text: $model.query, placement: .toolbar, prompt: "Search")
-            .searchFocused($keyboardFocus, equals: .search)
-            .onSubmit(of: .search) { model.submitSearch() }
         }
         .background(BrowserWindowCapture { browserWindow = $0 }.frame(width: 0, height: 0))
         .background(
@@ -741,5 +751,81 @@ struct QuickLook: NSViewRepresentable {
     }
     func updateNSView(_ view: QLPreviewView, context: Context) {
         if (view.previewItem as? NSURL) != url as NSURL { view.previewItem = url as NSURL }
+    }
+}
+
+// HOME: a real NSSearchField in the toolbar row. SwiftUI's .searchable gets
+// demoted by narrow windows into a dedicated row at the top of the sidebar,
+// and on this OS that row renders empty — the blank band users see above the
+// sidebar. A plain toolbar item can't demote: at narrow widths it overflows
+// into the standard toolbar overflow menu instead.
+struct ToolbarSearchField: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var focused: Bool
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = "Search"
+        field.sendsWholeSearchString = true
+        field.delegate = context.coordinator
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.submit)
+        field.font = .systemFont(ofSize: NSFont.systemFontSize)
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+        let editor = field.currentEditor()
+        let isActive =
+            field.window?.firstResponder === editor
+            || field.window?.firstResponder === field
+        if focused, !isActive, let window = field.window {
+            window.makeFirstResponder(field)
+        } else if !focused, isActive {
+            field.window?.makeFirstResponder(nil)
+        }
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var parent: ToolbarSearchField
+        init(_ parent: ToolbarSearchField) { self.parent = parent }
+
+        @objc func submit() { parent.onSubmit() }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            if !parent.focused { parent.focused = true }
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSSearchField else { return }
+            parent.text = field.stringValue
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            // Return keeps the field focused; only a real blur drops it.
+            guard let field = obj.object as? NSSearchField, let window = field.window
+            else { return }
+            if window.firstResponder !== field.currentEditor() { parent.focused = false }
+        }
+
+        func control(
+            _ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector
+        ) -> Bool {
+            guard commandSelector == #selector(NSResponder.cancelOperation(_:)) else {
+                return false
+            }
+            if !parent.text.isEmpty {
+                parent.text = ""
+            } else {
+                parent.focused = false
+                control.window?.makeFirstResponder(nil)
+            }
+            return true
+        }
     }
 }

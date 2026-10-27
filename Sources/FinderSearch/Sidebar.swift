@@ -445,8 +445,15 @@ struct BrowserSidebar: View, Equatable {
                 ForEach(state.layout.visibleSections, id: \.self) { section in
                     sectionRows(section)
                 }
-            }.padding(.vertical, 8).padding(.horizontal, 10)
+            }
+            .padding(.vertical, 8).padding(.horizontal, 10)
         }
+        // HOME: the split view places this column below the titlebar, but the
+        // backing scroll view also applies its own automatic glass inset — a
+        // double titlebar inset that left ~66pt of blank above the first row.
+        // Extending under the glass (like Finder's sidebar) removes the double
+        // count; the 8pt content padding keeps rows clear of it.
+        .ignoresSafeArea(.container, edges: .top)
         .onDrop(of: [UTType.fileURL], isTargeted: $folderDropTargeted) { providers in
             FavoriteFolderDrop.perform(providers, add: addFavoriteFolders)
         }
