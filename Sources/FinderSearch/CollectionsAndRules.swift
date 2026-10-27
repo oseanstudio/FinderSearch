@@ -215,12 +215,11 @@ struct HomeCollectionSection: View {
             ForEach(collections.items) { collection in
                 SidebarItemRow(
                     route: "col:" + collection.id.uuidString, selection: selection,
-                    onSelect: select
-                ) {
-                    Label(collection.name, systemImage: "square.stack.3d.up")
-                } menu: {
-                    collectionActions(collection)
-                }
+                    title: collection.name, symbol: "square.stack.3d.up", onSelect: select,
+                    menu: {
+                        collectionActions(collection)
+                    }
+                )
             }
             newCollectionRow
         }
@@ -289,17 +288,16 @@ struct HomeUserRulesSection: View {
         ForEach(rules.items) { rule in
             SidebarItemRow(
                 route: "rule:" + rule.id.uuidString, selection: selection,
-                onSelect: onSelect
-            ) {
-                Label(rule.name, systemImage: "slider.horizontal.3")
-            } menu: {
-                Button("Edit…") {
-                    editingRule = rule
-                    showBuilder = true
+                title: rule.name, symbol: "slider.horizontal.3", onSelect: onSelect,
+                menu: {
+                    Button("Edit…") {
+                        editingRule = rule
+                        showBuilder = true
+                    }
+                    Divider()
+                    Button("Delete", role: .destructive) { rules.remove(rule.id) }
                 }
-                Divider()
-                Button("Delete", role: .destructive) { rules.remove(rule.id) }
-            }
+            )
         }
         Button {
             editingRule = nil

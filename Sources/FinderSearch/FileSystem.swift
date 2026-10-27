@@ -28,34 +28,56 @@ enum FullDiskAccess {
         isInApplications(Bundle.main.bundleURL.path)
     }
 
-    /// The sidebar's "Enable Full Disk Access…" entry point.
-    static func requestEnable() {
-        guard !runsFromApplications else {
-            NSWorkspace.shared.open(settingsURL)
+    /// The sidebar's "Enable Full Disk Access…" entry point. Main actor: it
+    /// runs from UI, talks to Launch Services and shows dialogs.
+    @MainActor static func requestEnable() {
+        guard runsFromApplications else {
+            let alert = NSAlert()
+            alert.messageText = "Hearth isn't in your Applications folder"
+            alert.informativeText =
+                "macOS only lists apps from Applications in the Full Disk Access pane, so "
+                + "Hearth doesn't appear there yet. Move it to Applications (settings are "
+                + "kept), or open the pane and add it manually with the + button."
+            alert.addButton(withTitle: "Move to /Applications")
+            alert.addButton(withTitle: "Add Manually…")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                moveAndRelaunch()
+            case .alertSecondButtonReturn:
+                presentPane()
+            default:
+                break
+            }
             return
         }
+        presentPane()
+    }
+
+    /// Opens the pane with everything done to make Hearth show up: registered
+    /// with Launch Services, a TCC check triggered, and the bundle path on the
+    /// clipboard for the + fallback (the pane sometimes declines to list
+    /// ad-hoc signed apps).
+    @MainActor static func presentPane() {
+        ApplicationIcon.registerBundle()
+        _ = isGranted()  // a TCC read registers the app in the pane
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(
+            Bundle.main.bundleURL.path, forType: .string)
+        NSWorkspace.shared.open(settingsURL)
         let alert = NSAlert()
-        alert.messageText = "Hearth isn't in your Applications folder"
+        alert.messageText = "Switch on Full Disk Access for Hearth"
         alert.informativeText =
-            "macOS only lists apps from Applications in the Full Disk Access pane, so Hearth "
-            + "doesn't appear there yet. Move it to Applications (settings are kept), or "
-            + "open the pane and add it manually with the + button."
-        alert.addButton(withTitle: "Move to /Applications")
-        alert.addButton(withTitle: "Add Manually…")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            moveAndRelaunch()
-        case .alertSecondButtonReturn:
-            NSWorkspace.shared.open(settingsURL)
-        default:
-            break
-        }
+            "Hearth should be in the list — turn its switch on.\n\n"
+            + "If it is missing, click + under the list, press \u{2318}\u{21E7}G, paste "
+            + "(the path is already on your clipboard), and press Return."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     /// Copies the running bundle into Applications and relaunches from there.
     /// TCC identity follows the bundle identifier, so settings survive.
-    static func moveAndRelaunch() {
+    @MainActor static func moveAndRelaunch() {
         let bundle = Bundle.main.bundleURL
         let destinations = [
             URL(fileURLWithPath: "/Applications/Hearth.app"),

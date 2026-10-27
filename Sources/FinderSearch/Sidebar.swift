@@ -305,10 +305,14 @@ struct SidebarSectionHeader: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(title)
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 7)).foregroundStyle(.tertiary)
         }
+        .padding(.leading, 12).padding(.top, 14).padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(isDragged ? 0.35 : 1)
         // HOME: the catcher consumes mouse events before the List's selection
         // machinery can react; right-clicks still reach the context menu.
@@ -411,18 +415,17 @@ struct BrowserSidebar: View, Equatable {
                     select: select, layout: state.layout, selection: state.selection)  // HOME
                 if !state.layout.isHidden("row:recents") {
                     SidebarItemRow(
-                        route: "recents", selection: state.selection, onSelect: select
-                    ) {
-                        Label("Recents", systemImage: "clock")
-                    } menu: {
-                        SidebarRowMenu(itemID: "row:recents")
-                    }
+                        route: "recents", selection: state.selection, title: "Recents",
+                        symbol: "clock", onSelect: select,
+                    menu: {
+                            SidebarRowMenu(itemID: "row:recents")
+                    })
                 }
                 // HOME: drag a section's title to move it; right-click hides.
                 ForEach(state.layout.visibleSections, id: \.self) { section in
                     sectionRows(section)
                 }
-            }.padding(.vertical, 8)
+            }.padding(.vertical, 8).padding(.horizontal, 10)
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $folderDropTargeted) { providers in
             FavoriteFolderDrop.perform(providers, add: addFavoriteFolders)
@@ -473,13 +476,14 @@ struct BrowserSidebar: View, Equatable {
             SidebarSectionHeader(title: "Favorites", section: .favorites)
             ForEach(state.favorites, id: \.self) { path in
                 let label = FavoriteFolders.label(for: path)
-                SidebarItemRow(route: path, selection: state.selection, onSelect: select) {
-                    Label(label.name, systemImage: label.symbol)
-                } menu: {
-                    folderActions(path)
-                    Divider()
-                    Button("Remove from Sidebar") { removeFavorite(path) }
-                }
+                SidebarItemRow(
+                    route: path, selection: state.selection, title: label.name,
+                    symbol: label.symbol, onSelect: select,
+                menu: {
+                        folderActions(path)
+                        Divider()
+                        Button("Remove from Sidebar") { removeFavorite(path) }
+                })
                 .background {
                     FavoriteDragTarget(path: path) { source, target in
                         guard let from = state.favorites.firstIndex(of: source),
@@ -498,23 +502,24 @@ struct BrowserSidebar: View, Equatable {
             if !state.layout.isHidden("row:loc:icloud") {
                 SidebarItemRow(
                     route: home + "/Library/Mobile Documents/com~apple~CloudDocs",
-                    selection: state.selection, onSelect: select
-                ) {
-                    Label("iCloud Drive", systemImage: "icloud")
-                } menu: {
-                    folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
-                    Divider()
-                    SidebarRowMenu(itemID: "row:loc:icloud")
-                }
+                    selection: state.selection, title: "iCloud Drive", symbol: "icloud",
+                    onSelect: select,
+                menu: {
+                        folderActions(home + "/Library/Mobile Documents/com~apple~CloudDocs")
+                        Divider()
+                        SidebarRowMenu(itemID: "row:loc:icloud")
+                })
             }
             if !state.layout.isHidden("row:loc:home") {
-                SidebarItemRow(route: home, selection: state.selection, onSelect: select) {
-                    Label((home as NSString).lastPathComponent, systemImage: "house")
-                } menu: {
-                    folderActions(home)
-                    Divider()
-                    SidebarRowMenu(itemID: "row:loc:home")
-                }
+                SidebarItemRow(
+                    route: home, selection: state.selection,
+                    title: (home as NSString).lastPathComponent, symbol: "house",
+                    onSelect: select,
+                menu: {
+                        folderActions(home)
+                        Divider()
+                        SidebarRowMenu(itemID: "row:loc:home")
+                })
             }
             ForEach(state.volumes) { volume in
                 volumeRow(volume)
@@ -525,38 +530,38 @@ struct BrowserSidebar: View, Equatable {
     private func volumeRow(_ volume: MountedVolume) -> some View {
         let ejecting = state.ejectingVolumes.contains(volume.id)
         let ejectLabel = ejecting ? "Ejecting \(volume.name)…" : "Eject \(volume.name)"
-        return HStack(spacing: 0) {
-            Label(volume.name, systemImage: "externaldrive")
-            Spacer(minLength: 4)
-            if volume.canEject {
-                Button {
-                    eject(volume)
-                } label: {
-                    Group {
-                        if ejecting {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "eject.fill").font(.system(size: 11))
-                                .foregroundStyle(.primary)
-                        }
-                    }.frame(width: 24, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .disabled(ejecting)
-                .help(ejectLabel)
-                .accessibilityLabel(ejectLabel)
-            }
-        }
-        .modifier(
-            SidebarRowChrome(selected: state.selection == volume.id) { select(volume.id) })
-        .contextMenu {
-            folderActions(volume.id)
-            if volume.canEject {
-                Divider()
-                Button("Eject “\(volume.name)”") { eject(volume) }
+        return SidebarItemRow(
+            route: volume.id, selection: state.selection, title: volume.name,
+            symbol: "externaldrive", onSelect: select,
+            trailing: {
+                if volume.canEject {
+                    Button {
+                        eject(volume)
+                    } label: {
+                        Group {
+                            if ejecting {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "eject.fill").font(.system(size: 11))
+                                    .foregroundStyle(.primary)
+                            }
+                        }.frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.borderless)
                     .disabled(ejecting)
+                    .help(ejectLabel)
+                    .accessibilityLabel(ejectLabel)
+                }
+            },
+            menu: {
+                folderActions(volume.id)
+                if volume.canEject {
+                    Divider()
+                    Button("Eject \u{201C}\(volume.name)\u{201D}") { eject(volume) }
+                        .disabled(ejecting)
+                }
             }
-        }
+        )
     }
 
     @ViewBuilder private var tagsSection: some View {
@@ -564,16 +569,12 @@ struct BrowserSidebar: View, Equatable {
             SidebarSectionHeader(title: "Tags", section: .tags)
             ForEach(SidebarTags.values, id: \.0) { name, color in
                 if !state.layout.isHidden("row:tag:" + name) {
-                    SidebarItemRow(route: "tag:" + name, selection: state.selection, onSelect: select) {
-                        Label {
-                            Text(name)
-                        } icon: {
-                            Image(systemName: "circle.fill").font(.system(size: 10))
-                                .foregroundStyle(color)
-                        }
-                    } menu: {
-                        SidebarRowMenu(itemID: "row:tag:" + name)
-                    }
+                    SidebarItemRow(
+                        route: "tag:" + name, selection: state.selection, title: name,
+                        symbol: "circle.fill", dot: color, onSelect: select,
+                    menu: {
+                            SidebarRowMenu(itemID: "row:tag:" + name)
+                    })
                 }
             }
         }
@@ -581,9 +582,10 @@ struct BrowserSidebar: View, Equatable {
 
 }
 
-/// HOME: a sidebar row drawn by hand — hover highlight, selection fill,
-/// tap to navigate. Plain views instead of List rows: no selection machinery
-/// to fight, so drags own their events completely.
+/// HOME: a sidebar row drawn by hand to match the platform sidebar —
+/// accent-tinted icon, solid accent selection with white label, hover
+/// highlight. Plain views instead of List rows: no selection machinery to
+/// fight, so drags own their events completely.
 struct SidebarRowChrome: ViewModifier {
     let selected: Bool
     let onSelect: () -> Void
@@ -591,34 +593,76 @@ struct SidebarRowChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, 8).padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(
                         selected
-                            ? Color.accentColor.opacity(0.3)
-                            : hovering ? Color.primary.opacity(0.06) : Color.clear))
+                            ? Color.accentColor
+                            : hovering ? Color.primary.opacity(0.07) : Color.clear))
             .contentShape(Rectangle())
             .onTapGesture(perform: onSelect)
             .onHover { hovering = $0 }
     }
 }
 
-struct SidebarItemRow<Menu: View, LabelContent: View>: View {
+struct SidebarItemRow<Trailing: View, Menu: View>: View {
     let route: String
     let selection: String?
+    let title: String
+    let symbol: String
+    var dot: Color? = nil
     let onSelect: (String) -> Void
-    @ViewBuilder let label: () -> LabelContent
+    @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let menu: () -> Menu
 
+    init(
+        route: String, selection: String?, title: String, symbol: String,
+        dot: Color? = nil, onSelect: @escaping (String) -> Void,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
+        @ViewBuilder menu: @escaping () -> Menu
+    ) {
+        self.route = route
+        self.selection = selection
+        self.title = title
+        self.symbol = symbol
+        self.dot = dot
+        self.onSelect = onSelect
+        self.trailing = trailing
+        self.menu = menu
+    }
+
+    private var selected: Bool { selection == route }
+
     var body: some View {
-        HStack(spacing: 0) {
-            label()
+        HStack(spacing: 7) {
+            icon
+                .font(.system(size: 13))
+                .foregroundStyle(self.selected ? Color.white : Color.accentColor)
+                .frame(width: 17)
+                .overlay {
+                    if let dot {
+                        Circle().fill(dot).frame(width: 10, height: 10)
+                    }
+                }
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 0)
+            if !selected { trailing() }
         }
-        .modifier(SidebarRowChrome(selected: selection == route) { onSelect(route) })
+        .modifier(SidebarRowChrome(selected: selected) { onSelect(route) })
         .contextMenu { menu() }
+    }
+
+    @ViewBuilder private var icon: some View {
+        if dot != nil {
+            Image(systemName: "circle.fill").foregroundStyle(.tertiary)
+        } else {
+            Image(systemName: symbol)
+        }
     }
 }
 

@@ -247,18 +247,22 @@ struct HomePinnedSections: View {
 
     var body: some View {
         if !layout.isHidden("row:home") {
-            SidebarItemRow(route: "home", selection: selection, onSelect: select) {
-                Label("Home", systemImage: "house.fill")
-            } menu: {
-                SidebarRowMenu(itemID: "row:home")
-            }
+            SidebarItemRow(
+                route: "home", selection: selection, title: "Home", symbol: "house.fill",
+                onSelect: select,
+                menu: {
+                    SidebarRowMenu(itemID: "row:home")
+                }
+            )
         }
         if !layout.isHidden("row:semantic") {
-            SidebarItemRow(route: "semantic", selection: selection, onSelect: select) {
-                Label("Search", systemImage: "text.magnifyingglass")  // DIGUP
-            } menu: {
-                SidebarRowMenu(itemID: "row:semantic")
-            }
+            SidebarItemRow(
+                route: "semantic", selection: selection, title: "Search",
+                symbol: "text.magnifyingglass", onSelect: select,
+                menu: {
+                    SidebarRowMenu(itemID: "row:semantic")
+                }
+            )
         }
     }
 }
@@ -275,12 +279,11 @@ struct HomeCategorySection: View {
                 if !layout.isHidden("row:cat:" + category.rawValue) {
                     SidebarItemRow(
                         route: "cat:" + category.rawValue, selection: selection,
-                        onSelect: onSelect
-                    ) {
-                        Label(category.title, systemImage: category.symbol)
-                    } menu: {
-                        SidebarRowMenu(itemID: "row:cat:" + category.rawValue)
-                    }
+                        title: category.title, symbol: category.symbol, onSelect: onSelect,
+                        menu: {
+                            SidebarRowMenu(itemID: "row:cat:" + category.rawValue)
+                        }
+                    )
                 }
             }
         }
@@ -299,12 +302,11 @@ struct HomeSmartFolderSection: View {
                 if !layout.isHidden("row:smart:" + smart.rawValue) {
                     SidebarItemRow(
                         route: "smart:" + smart.rawValue, selection: selection,
-                        onSelect: onSelect
-                    ) {
-                        Label(smart.title, systemImage: smart.symbol)
-                    } menu: {
-                        SidebarRowMenu(itemID: "row:smart:" + smart.rawValue)
-                    }
+                        title: smart.title, symbol: smart.symbol, onSelect: onSelect,
+                        menu: {
+                            SidebarRowMenu(itemID: "row:smart:" + smart.rawValue)
+                        }
+                    )
                 }
             }
             HomeUserRulesSection(selection: selection, onSelect: onSelect)  // HOME
@@ -324,14 +326,14 @@ struct HomeSavedSearchSection: View {
                 ForEach(saved.entries) { entry in
                     SidebarItemRow(
                         route: "search:" + entry.id.uuidString, selection: selection,
-                        onSelect: { _ in saved.run(entry, select: select) }
-                    ) {
-                        Label(entry.name, systemImage: "magnifyingglass")
-                    } menu: {
-                        Button("Run Search") { saved.run(entry, select: select) }
-                        Divider()
-                        Button("Remove") { saved.remove(entry) }
-                    }
+                        title: entry.name, symbol: "magnifyingglass",
+                        onSelect: { _ in saved.run(entry, select: select) },
+                        menu: {
+                            Button("Run Search") { saved.run(entry, select: select) }
+                            Divider()
+                            Button("Remove") { saved.remove(entry) }
+                        }
+                    )
                 }
             }
         }
