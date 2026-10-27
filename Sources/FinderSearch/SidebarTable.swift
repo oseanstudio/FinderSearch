@@ -273,7 +273,10 @@ struct SidebarTableView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
+        // SwiftUI's safe area already positions the scroll view below the
+        // titlebar; rows must clip there instead of scrolling under the glass.
         scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
         context.coordinator.scroll = scroll
         context.coordinator.rebuild(state: state)
         return scroll
@@ -282,9 +285,19 @@ struct SidebarTableView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         let coordinator = context.coordinator
         coordinator.actions = actions
-        coordinator.reapplyInsets()
         guard coordinator.state != state else { return }
-        coordinator.rebuild(state: state)
+        // Selection-only changes just move the highlight; a reload here would
+        // cancel an in-progress native drag.
+        if let old = coordinator.state, old.structureMatches(state) {
+            coordinator.state = state
+            if old.selection != state.selection,
+                let table = scroll.documentView as? NSTableView
+            {
+                coordinator.syncSelection(table: table)
+            }
+        } else {
+            coordinator.rebuild(state: state)
+        }
     }
 }
 
@@ -299,10 +312,6 @@ final class SidebarNSTableView: NSTableView {
     override var allowsVibrancy: Bool { true }
     weak var coordinator: SidebarTableCoordinator?
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        coordinator?.reapplyInsets()
-    }
 }
 
 @MainActor final class SidebarTableCoordinator: NSObject {
@@ -311,7 +320,6 @@ final class SidebarNSTableView: NSTableView {
     var entries: [SidebarEntry] = []
     weak var scroll: NSScrollView?
     private var cancellables: Set<AnyCancellable> = []
-    private var windowObserver: NSObjectProtocol?
 
     init(actions: SidebarTableActions) {
         self.actions = actions
@@ -326,10 +334,6 @@ final class SidebarNSTableView: NSTableView {
             .sink { [weak self] _ in self?.reloadFromModel() }.store(in: &cancellables)
     }
 
-    deinit {
-        if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
-    }
-
     private func reloadFromModel() {
         guard let state else { return }
         rebuild(state: state)
@@ -341,28 +345,6 @@ final class SidebarNSTableView: NSTableView {
         guard let table = scroll?.documentView as? NSTableView else { return }
         table.reloadData()
         syncSelection(table: table)
-    }
-
-    // MARK: window geometry — the scroll view extends under the titlebar
-    // glass with one explicit top content inset, like AppKit sidebars do.
-
-    func observeWindow(_ view: NSView) {
-        if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
-        windowObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didUpdateNotification, object: view.window, queue: .main
-        ) { [weak self] _ in self?.reapplyInsets() }
-    }
-
-    func reapplyInsets() {
-        guard let scroll, let window = scroll.window else { return }
-        let titlebar = window.frame.height - window.contentLayoutRect.maxY
-        let target = NSEdgeInsets(top: titlebar, left: 0, bottom: 0, right: 0)
-        let current = scroll.contentInsets
-        if current.top != target.top || current.left != target.left
-            || current.bottom != target.bottom || current.right != target.right
-        {
-            scroll.contentInsets = target
-        }
     }
 
     // MARK: selection
@@ -654,10 +636,12 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        // Headers must be selectable for AppKit to start a drag on them;
+        // group rows draw no selection, and didSelect ignores them anyway.
+        if case .header = entry(at: row) { return true }
         switch entry(at: row) {
-        case .header: return false
         case .item(let item): return item.run == nil || item.route != nil
-        case nil: return false
+        default: return false
         }
     }
 

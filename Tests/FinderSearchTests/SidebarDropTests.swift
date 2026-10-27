@@ -127,3 +127,56 @@ final class SidebarDropTests: XCTestCase {
             layout.orderedIDs(section: .favorites, current: ["a", "z"]), ["a", "z"])
     }
 }
+
+extension SidebarDropTests {
+    /// Every reorderable row must offer a pasteboard writer — that's the gate
+    /// AppKit requires before a native drag can start. Volumes and action
+    /// rows must not.
+    @MainActor
+    func testPasteboardWritersForDraggableRows() {
+        var layout = SidebarLayout(sections: Array(SidebarSection.allCases), hidden: [])
+        layout.setHidden("row:loc:home", true)
+        let volume = MountedVolume(
+            url: URL(fileURLWithPath: "/Volumes/SD"), canEject: true)
+        let state = SidebarState(
+            route: "", favorites: ["/Users/xox/Desktop"],
+            volumes: [volume], ejectingVolumes: [],
+            showDiskAccessHint: false, layout: layout)
+        let actions = SidebarTableActions(
+            select: { _ in }, removeFavorite: { _ in }, openInNewTab: { _ in },
+            addFavoriteFolders: { _ in true }, eject: { _ in })
+        let coordinator = SidebarTableCoordinator(actions: actions)
+        coordinator.rebuild(state: state)
+        let table = NSTableView()
+
+        var sawFavorite = false
+        var sawHeader = false
+        for row in 0..<coordinator.entries.count {
+            let writer = coordinator.tableView(table, pasteboardWriterForRowAt: row)
+            switch coordinator.entries[row] {
+            case .header:
+                sawHeader = true
+                XCTAssertNotNil(writer, "header rows must be draggable")
+                if let item = writer as? NSPasteboardItem {
+                    XCTAssertNotNil(item.string(forType: .sidebarSection))
+                }
+            case .item(let item):
+                switch item.kind {
+                case .volume:
+                    XCTAssertNil(writer, "volumes don't reorder")
+                case .newCollection, .newSmartFolder:
+                    XCTAssertNil(writer, "action rows don't drag")
+                case .favorite("/Users/xox/Desktop"):
+                    sawFavorite = true
+                    XCTAssertNotNil(writer, "favorites must be draggable")
+                case .pinnedHome, .pinnedSearch, .recents:
+                    XCTAssertNil(writer, "pinned rows stay fixed, like Finder's top area")
+                default:
+                    XCTAssertNotNil(writer, "\(item.title) must be draggable")
+                }
+            }
+        }
+        XCTAssertTrue(sawFavorite, "favorite writer check ran")
+        XCTAssertTrue(sawHeader, "header writer check ran")
+    }
+}

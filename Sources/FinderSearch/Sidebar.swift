@@ -206,7 +206,16 @@ struct SidebarState: Equatable {
         self.showDiskAccessHint = showDiskAccessHint
         self.layout = layout
     }
+    /// Everything except the selected route. Selection-only changes must not
+    /// reload the table — a reload during the mouse-down-to-drag transition
+    /// cancels AppKit's native drag before it starts.
+    func structureMatches(_ other: SidebarState) -> Bool {
+        favorites == other.favorites && volumes == other.volumes
+            && ejectingVolumes == other.ejectingVolumes
+            && showDiskAccessHint == other.showDiskAccessHint && layout == other.layout
+    }
 }
+
 
 struct BrowserSidebar: View, Equatable {
     let state: SidebarState
@@ -222,6 +231,7 @@ struct BrowserSidebar: View, Equatable {
         lhs.state == rhs.state
     }
 
+
     var body: some View {
         VStack(spacing: 0) {
             // HOME: native NSTableView — Finder's own control — so drag
@@ -234,7 +244,6 @@ struct BrowserSidebar: View, Equatable {
                 addFavoriteFolders: addFavoriteFolders,
                 eject: eject
             ))
-            .ignoresSafeArea(.container, edges: .top)
             if state.showDiskAccessHint {
                 Divider()
                 Button {
