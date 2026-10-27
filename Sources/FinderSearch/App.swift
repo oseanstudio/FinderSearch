@@ -602,15 +602,20 @@ struct BrowserView: View {
             }
         }
     }
-    // HOME: toolbar bell for pending updates; the badge counts the repos.
-    @ViewBuilder private var updatesBadgeButton: some View {
-        if !updates.offers.isEmpty {
-            Button {
-                showUpdates = true
-            } label: {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(Color.accentColor)
-                    .overlay(alignment: .topTrailing) {
+    // HOME: toolbar bell for pending updates; the badge counts the repos. The
+    // item always exists — appearing/disappearing toolbar items re-layout the
+    // toolbar mid-session, which on this OS evicts the .searchable field into
+    // an empty full-width row below the toolbar.
+    private var updatesBadgeButton: some View {
+        let pending = !updates.offers.isEmpty
+        return Button {
+            if pending { showUpdates = true }
+        } label: {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(Color.accentColor)
+                .opacity(pending ? 1 : 0)
+                .overlay(alignment: .topTrailing) {
+                    if pending {
                         Text("\(updates.offers.count)")
                             .font(.system(size: 9, weight: .bold))
                             .padding(2).frame(minWidth: 12)
@@ -618,8 +623,10 @@ struct BrowserView: View {
                             .foregroundStyle(Color.white)
                             .offset(x: 6, y: -6)
                     }
-            }.help("Updates available")
+                }
         }
+        .disabled(!pending)
+        .help(pending ? "Updates available" : "No pending updates")
     }
 
     @ViewBuilder private var backgroundActions: some View {
