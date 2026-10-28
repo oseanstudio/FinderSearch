@@ -168,7 +168,8 @@ struct BrowserView: View {
     @State private var fileNavigationActive = false
     @State private var keyMonitor: Any?
     @State private var browserWindow: NSWindow?
-    @State private var iconSize: Double = 64
+    // HOME: persisted so the zoom survives relaunches (bitmaps cap at 512px).
+    @AppStorage("home.iconSize") private var iconSize: Double = 64
     @State private var gridColumns = 5
     // HOME: the icon size actually drawn (capped by the fixed cell width).
     @State private var cellIconSize: Double = 64
@@ -392,6 +393,17 @@ struct BrowserView: View {
                 if command == .new { workspace.newTab() } else { workspace.reopenClosedTab() }
                 return nil
             }
+            // HOME: ⌘=/⌘− zoom thumbnails (column count follows the size).
+            if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.option) {
+                if event.keyCode == 24 {  // = and +
+                    zoomIcons(+32)
+                    return nil
+                }
+                if event.keyCode == 27 {  // -
+                    zoomIcons(-32)
+                    return nil
+                }
+            }
             if searchFocused && event.keyCode == 125 && !model.sortedHits.isEmpty {
                 focusFiles(); model.select(model.sortedHits[0], extending: false, toggling: false)
                 model.selectionNavigation.send((model.sortedHits[0].path, false)); return nil
@@ -506,12 +518,18 @@ struct BrowserView: View {
         }
     }
     private func updateColumns(_ width: Double) {
-        // HOME: columns are fixed by the default cell size so growing the
-        // thumbnail slider never drops columns — icons just fill their cell.
-        gridColumns = max(1, Int((width - 36) / (64.0 + 69.0)))
+        // HOME: columns follow the icon size (⌘=/⌘− and the slider resize
+        // thumbnails; the count is whatever fits). cellIconSize only rounds
+        // down when the last column can't fit a full cell.
+        gridColumns = max(1, Int((width - 36) / (iconSize + 69)))
         let spacing = 14.0
         let cell = (width - 36 - spacing * Double(gridColumns - 1)) / Double(gridColumns)
         cellIconSize = max(40, min(iconSize, cell - 30))
+    }
+
+    // HOME: Finder-style zoom shortcuts — bigger icons means fewer columns.
+    private func zoomIcons(_ delta: Double) {
+        iconSize = min(512, max(40, (iconSize / 16).rounded() * 16 + delta))
     }
     private func iconScroll(minHeight: Double) -> some View {
         ScrollViewReader { proxy in
@@ -647,8 +665,8 @@ struct BrowserView: View {
             if model.isSearch { Text(String(format: "· %.1f ms", model.elapsed)).monospacedDigit() }
             if model.viewMode == .icons {
                 Image(systemName: "square").font(.system(size: 8));
-                // HOME: 256 max — 96 was too small for photo browsing.
-                Slider(value: $iconSize, in: 40...256).frame(width: 110).accessibilityLabel(
+                // HOME: 512 max — big enough for full-fidelity photo browsing.
+                Slider(value: $iconSize, in: 40...512).frame(width: 110).accessibilityLabel(
                     "Icon Size");
                 Image(systemName: "square").font(.system(size: 13))
             }
