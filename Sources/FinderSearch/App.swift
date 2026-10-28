@@ -174,9 +174,9 @@ struct BrowserView: View {
     // keyboard shortcuts and the menu change it; the slider never does.
     @AppStorage("home.iconColumns") private var userColumns: Int = 0
     @State private var gridWidth: Double = 0
-    // HOME: cell width for icon view — grows past the natural width when the
-    // slider asks for bigger thumbnails than the columns would fit.
-    @State private var cellWidth: Double = 100
+    // HOME: the biggest thumbnail the current columns can show without
+    // sideways scrolling; the slider's upper bound.
+    @State private var iconSizeCeiling: Double = 256
     @State private var gridColumns = 5
     // HOME: the icon size actually drawn (capped by the fixed cell width).
     @State private var cellIconSize: Double = 64
@@ -529,16 +529,17 @@ struct BrowserView: View {
     }
     private func updateColumns(_ width: Double) {
         // HOME: the column count is the user's (shortcuts or menu; 0 = auto).
-        // The slider only scales thumbnails: a size larger than the natural
-        // cell widens cells (the grid then scrolls sideways) instead of
-        // dropping columns, so the count never changes from the slider.
+        // The grid never scrolls sideways: thumbnails cap at the cell, and
+        // the slider's range ends exactly there — its max is the biggest
+        // size the current columns can show. ⌘= removes a column to raise
+        // that ceiling.
         gridWidth = width
         let auto = max(1, Int((width - 36) / (64.0 + 69.0)))
         gridColumns = userColumns > 0 ? min(16, max(1, userColumns)) : auto
         let spacing = 14.0
         let natural = (width - 36 - spacing * Double(gridColumns - 1)) / Double(gridColumns)
-        cellWidth = max(natural, iconSize + 55)
-        cellIconSize = max(40, min(iconSize, cellWidth - 30))
+        iconSizeCeiling = max(56, natural - 30)
+        cellIconSize = max(40, min(iconSize, iconSizeCeiling))
     }
 
     // HOME: ⌘= zooms in by removing a column (bigger cells, bigger
@@ -552,11 +553,10 @@ struct BrowserView: View {
     }
     private func iconScroll(minHeight: Double) -> some View {
         ScrollViewReader { proxy in
-            ScrollView([.vertical, .horizontal]) {
+            ScrollView {
                 LazyVGrid(
                     columns: Array(
-                        repeating: GridItem(.fixed(cellWidth), spacing: 14),
-                        count: gridColumns),
+                        repeating: GridItem(.flexible(), spacing: 14), count: gridColumns),
                     alignment: .leading, spacing: 18
                 ) {
                     ForEach(model.sortedHits) { hit in iconCell(hit) }
@@ -685,9 +685,10 @@ struct BrowserView: View {
             if model.isSearch { Text(String(format: "· %.1f ms", model.elapsed)).monospacedDigit() }
             if model.viewMode == .icons {
                 Image(systemName: "square").font(.system(size: 8));
-                // HOME: 512 max — big enough for full-fidelity photo browsing.
-                Slider(value: $iconSize, in: 40...512).frame(width: 110).accessibilityLabel(
-                    "Icon Size");
+                // HOME: the range tops out at the current columns' biggest
+                // size; ⌘= raises the ceiling by removing a column.
+                Slider(value: $iconSize, in: 40...max(56, iconSizeCeiling)).frame(width: 110)
+                    .accessibilityLabel("Icon Size");
                 Image(systemName: "square").font(.system(size: 13))
             }
         }
