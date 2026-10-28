@@ -668,6 +668,23 @@ struct BrowserView: View {
         }
     }
 
+    private var crumbChevron: some View {
+        Image(systemName: "chevron.right").font(.system(size: 8))
+            .foregroundStyle(.tertiary)
+    }
+
+    /// The selected item's folder chain, root first.
+    private func selectionAncestors(_ hit: Hit) -> [URL] {
+        var result: [URL] = []
+        var url = hit.url.deletingLastPathComponent()
+        while true {
+            result.insert(url, at: 0)
+            if url.path == "/" { break }
+            url.deleteLastPathComponent()
+        }
+        return result
+    }
+
     private var crumbs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 5) {
@@ -681,6 +698,30 @@ struct BrowserView: View {
                             model.route == "recents"
                             ? "clock" : model.route.hasPrefix("tag:")
                                 ? "tag" : HomeRoute(model.route)?.symbol ?? "house")  // HOME
+                    // HOME: smart folders gather files from all over, so the
+                    // selected item's path is the only way to see where it is.
+                    if let hit = model.selected {
+                        ForEach(selectionAncestors(hit), id: \.path) { url in
+                            crumbChevron
+                            Button {
+                                model.navigate(url)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(
+                                        systemName: url.path == "/"
+                                            ? "internaldrive" : "folder.fill"
+                                    ).font(.system(size: 11));
+                                    Text(
+                                        url.path == "/"
+                                            ? "Macintosh HD" : url.lastPathComponent
+                                    ).lineLimit(1)
+                                }
+                            }.buttonStyle(.plain)
+                        }
+                        crumbChevron
+                        Text(hit.name).lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     ForEach(model.ancestors, id: \.path) { url in
                         Button {
