@@ -86,7 +86,9 @@ import Combine
         guard visible.indices.contains(selection) else { return }
         let hit = visible[selection]
         if reveal {
-            NSWorkspace.shared.activateFileViewerSelecting([hit.url])
+            // HOME: reveal inside Hearth's own window, not Finder.
+            NotificationCenter.default.post(
+                name: .homeRevealInHearth, object: nil, userInfo: ["url": hit.url])
         } else {
             _ = NSWorkspace.shared.open(hit.url)
             // Tell the index what we opened so future ranking improves.
@@ -134,6 +136,22 @@ struct QuickSearchView: View {
                             }
                             .onHover { hovering in
                                 if hovering { model.selection = index }
+                            }
+                            .contextMenu {  // HOME: reveal inside Hearth
+                                Button("Open") {
+                                    model.selection = index
+                                    model.open()
+                                }
+                                Button("Show in Hearth") {
+                                    model.selection = index
+                                    model.open(reveal: true)
+                                }
+                                Divider()
+                                Button("Show in Finder") {
+                                    model.selection = index
+                                    NSWorkspace.shared.activateFileViewerSelecting([hit.url])
+                                    QuickSearchController.shared.hide()
+                                }
                             }
                     }
                 }.padding(.vertical, 6)
@@ -333,4 +351,9 @@ enum NSMoveCommand { case moveUp, moveDown }
     func hide() {
         panel?.orderOut(nil)
     }
+}
+
+extension Notification.Name {
+    /// HOME: asks the browser window to reveal a file inside Hearth itself.
+    static let homeRevealInHearth = Notification.Name("home.revealInHearth")
 }

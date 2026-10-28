@@ -162,6 +162,8 @@ struct BrowserView: View {
             expanded: isExpanded)
     }
 
+    // HOME: reveal target while its folder loads (menu bar panel requests).
+    @State private var revealTarget: String?
     // HOME: the rule builder, presented from the sidebar's context menu.
     @State private var editingRule: HomeSmartRule?
     @State private var showRuleBuilder = false
@@ -348,6 +350,10 @@ struct BrowserView: View {
             editingRule = note.object as? HomeSmartRule
             showRuleBuilder = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .homeRevealInHearth)) { note in  // HOME
+            guard let url = note.userInfo?["url"] as? URL else { return }
+            revealInHearth(url)
+        }
         .sheet(isPresented: $showRuleBuilder) {  // HOME
             SmartRuleSheet(rule: editingRule)
         }
@@ -360,6 +366,7 @@ struct BrowserView: View {
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)
         ) { _ in workspace.refreshVolumes() }
+        .onChange(of: model.hits) { _, _ in selectRevealTargetIfLoaded() }  // HOME
         .onChange(of: model.viewMode) { _, _ in
             model.cancelRename()
             model.extraHits = []; model.selection.formIntersection(Set(model.hits.map(\.path)))
@@ -395,6 +402,26 @@ struct BrowserView: View {
             }
         }
     }
+    /// HOME: bring the window forward, open the file's folder and select it —
+    /// Hearth's own reveal, used by the menu bar panel.
+    private func revealInHearth(_ url: URL) {
+        NSApp.activate(ignoringOtherApps: true)
+        browserWindow?.makeKeyAndOrderFront(nil)
+        let parent = url.deletingLastPathComponent()
+        if model.location != parent { model.navigate(parent) }
+        revealTarget = url.path
+        selectRevealTargetIfLoaded()
+    }
+
+    private func selectRevealTargetIfLoaded() {
+        guard let target = revealTarget,
+            let hit = model.sortedHits.first(where: { $0.path == target })
+        else { return }
+        revealTarget = nil
+        model.select(hit, extending: false, toggling: false)
+        model.selectionNavigation.send((hit.path, false))
+    }
+
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
