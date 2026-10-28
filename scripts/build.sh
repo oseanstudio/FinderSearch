@@ -49,8 +49,16 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-codesign --force --sign - "$app/Contents/Helpers/fsearch"
-codesign --force --sign - "$app"
+# HOME: sign with a stable local identity when one exists so macOS keeps
+# recognizing every rebuild as the same app — ad-hoc signatures change each
+# build, which made TCC (Full Disk Access) re-prompt after every update.
+identity="-"
+if found=$(security find-identity -v -p codesigning | sed -n 's/^ *[0-9]*) [A-F0-9]* "\(.*\)"$/\1/p') && [[ -n "$found" ]]; then
+    identity="$found"
+    print "Signing with identity: $identity"
+fi
+codesign --force --sign "$identity" "$app/Contents/Helpers/fsearch"
+codesign --force --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
 # Launch Services notices updated bundles by their directory modification time.
 touch "$app"
