@@ -170,6 +170,10 @@ struct BrowserView: View {
     @State private var browserWindow: NSWindow?
     // HOME: persisted so the zoom survives relaunches (bitmaps cap at 512px).
     @AppStorage("home.iconSize") private var iconSize: Double = 64
+    // HOME: the user's column count for icon view — 0 means auto. Only the
+    // keyboard shortcuts and the menu change it; the slider never does.
+    @AppStorage("home.iconColumns") private var userColumns: Int = 0
+    @State private var gridWidth: Double = 0
     @State private var gridColumns = 5
     // HOME: the icon size actually drawn (capped by the fixed cell width).
     @State private var cellIconSize: Double = 64
@@ -515,21 +519,31 @@ struct BrowserView: View {
                 .onAppear { updateColumns(geometry.size.width) }
                 .onChange(of: geometry.size.width) { _, width in updateColumns(width) }
                 .onChange(of: iconSize) { _, _ in updateColumns(geometry.size.width) }
+                .onChange(of: userColumns) { _, _ in
+                    updateColumns(gridWidth > 0 ? gridWidth : geometry.size.width)
+                }
         }
     }
     private func updateColumns(_ width: Double) {
-        // HOME: columns follow the icon size (⌘=/⌘− and the slider resize
-        // thumbnails; the count is whatever fits). cellIconSize only rounds
-        // down when the last column can't fit a full cell.
-        gridColumns = max(1, Int((width - 36) / (iconSize + 69)))
+        // HOME: the column count is the user's (shortcuts or menu; 0 = auto
+        // at default density). The slider only scales thumbnails, capped by
+        // the cell so it can never change the count.
+        gridWidth = width
+        let auto = max(1, Int((width - 36) / (64.0 + 69.0)))
+        gridColumns = userColumns > 0 ? min(16, max(1, userColumns)) : auto
         let spacing = 14.0
         let cell = (width - 36 - spacing * Double(gridColumns - 1)) / Double(gridColumns)
         cellIconSize = max(40, min(iconSize, cell - 30))
     }
 
-    // HOME: Finder-style zoom shortcuts — bigger icons means fewer columns.
+    // HOME: ⌘= zooms in by removing a column (bigger cells, bigger
+    // thumbnails); ⌘− adds one. The slider is untouched.
     private func zoomIcons(_ delta: Double) {
-        iconSize = min(512, max(40, (iconSize / 16).rounded() * 16 + delta))
+        if delta > 0 {
+            userColumns = max(1, gridColumns - 1)
+        } else {
+            userColumns = min(16, gridColumns + 1)
+        }
     }
     private func iconScroll(minHeight: Double) -> some View {
         ScrollViewReader { proxy in
@@ -700,6 +714,13 @@ struct BrowserView: View {
     }
 
     @ViewBuilder private var backgroundActions: some View {
+        Menu("Columns") {  // HOME: icon-view density; 0 = auto
+            Button("Auto") { userColumns = 0 }
+            Divider()
+            ForEach(1...10, id: \.self) { count in
+                Button(count == 1 ? "1 Column" : "\(count) Columns") { userColumns = count }
+            }
+        }
         Menu("Sort By") {  // HOME: Finder's right-click sort menu
             Picker("Sort By", selection: $model.sort) {
                 ForEach(FileSort.allCases, id: \.self) { sort in
