@@ -173,6 +173,9 @@ struct BrowserView: View {
     // HOME: the user's column count for icon view — 0 means auto. Only the
     // keyboard shortcuts and the menu change it; the slider never does.
     @AppStorage("home.iconColumns") private var userColumns: Int = 0
+    // HOME: show each item's size under its name in icon view (Finder's
+    // "Show Item Info"); the Large Files route always shows sizes.
+    @AppStorage("home.showItemInfo") private var showItemInfo = false
     @State private var gridWidth: Double = 0
     // HOME: the biggest thumbnail the current columns can show without
     // sideways scrolling; the slider's upper bound.
@@ -576,7 +579,7 @@ struct BrowserView: View {
                 width: cellIconSize + 10, height: cellIconSize + 10)
             FileNameLabel(model: model, hit: hit, lineLimit: 2, centered: true)
                 .frame(height: 32, alignment: .top)
-            if HomeRoute(model.route) == .smart(.large) {  // HOME: sizes under items
+            if showItemInfo || HomeRoute(model.route) == .smart(.large) {  // HOME
                 Text(ByteCountFormatter.string(fromByteCount: Int64(hit.size), countStyle: .file))
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -721,13 +724,6 @@ struct BrowserView: View {
     }
 
     @ViewBuilder private var backgroundActions: some View {
-        Menu("Columns") {  // HOME: icon-view density; 0 = auto
-            Button("Auto") { userColumns = 0 }
-            Divider()
-            ForEach(1...10, id: \.self) { count in
-                Button(count == 1 ? "1 Column" : "\(count) Columns") { userColumns = count }
-            }
-        }
         Menu("Sort By") {  // HOME: Finder's right-click sort menu
             Picker("Sort By", selection: $model.sort) {
                 ForEach(FileSort.allCases, id: \.self) { sort in
@@ -755,6 +751,15 @@ struct BrowserView: View {
             ForEach(FileViewMode.allCases, id: \.self) { mode in
                 Button(mode.title) { model.viewMode = mode }
             }
+            Divider()
+            Menu("Icons per Row") {  // HOME: icon-view density; 0 = auto
+                Button("Automatically") { userColumns = 0 }
+                Divider()
+                ForEach(1...10, id: \.self) { count in
+                    Button("\(count) per Row") { userColumns = count }
+                }
+            }
+            Toggle("Show File Sizes", isOn: $showItemInfo)  // HOME
         }
         Toggle("Show Hidden Files", isOn: $model.showHidden)
         Button("New Smart Folder…") {  // HOME: sidebar row was removed
