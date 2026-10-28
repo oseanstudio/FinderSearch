@@ -237,11 +237,14 @@ struct SidebarTableView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
-        // SwiftUI's safe area already positions the scroll view below the
-        // titlebar; rows must clip there instead of scrolling under the glass.
+        // HOME: Finder look — the sidebar material and scroller run the full
+        // window height under the titlebar (the browser adds ignoresSafeArea
+        // on this view); rows clip below the titlebar via the content inset.
+        scroll.verticalScroller?.scrollerStyle = .overlay
         scroll.automaticallyAdjustsContentInsets = false
-        scroll.contentInsets = NSEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
         context.coordinator.scroll = scroll
+        context.coordinator.observeWindow(scroll)
+        context.coordinator.reapplyInsets()
         context.coordinator.rebuild(state: state)
         return scroll
     }
@@ -276,6 +279,12 @@ final class SidebarNSTableView: NSTableView {
     override var allowsVibrancy: Bool { true }
     weak var coordinator: SidebarTableCoordinator?
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { coordinator?.observeWindow(self) }
+        coordinator?.reapplyInsets()
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: NSPoint(x: 0, y: convert(event.locationInWindow, from: nil).y))
         let menu = super.menu(for: event)
@@ -291,6 +300,7 @@ final class SidebarNSTableView: NSTableView {
     var entries: [SidebarEntry] = []
     weak var scroll: NSScrollView?
     private var cancellables: Set<AnyCancellable> = []
+    private var windowObserver: NSObjectProtocol?
 
     init(actions: SidebarTableActions) {
         self.actions = actions
@@ -308,6 +318,27 @@ final class SidebarNSTableView: NSTableView {
     private func reloadFromModel() {
         guard let state else { return }
         rebuild(state: state)
+    }
+
+    // MARK: window geometry — material runs under the titlebar glass like
+    // Finder's sidebar; the first row clears the titlebar plus a breath.
+
+    func observeWindow(_ view: NSView) {
+        if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didUpdateNotification, object: view.window, queue: .main
+        ) { [weak self] _ in self?.reapplyInsets() }
+    }
+
+    func reapplyInsets() {
+        guard let scroll, let window = scroll.window else { return }
+        let titlebar = window.frame.height - window.contentLayoutRect.maxY
+        guard titlebar > 0 else { return }  // window not settled; didUpdate retries
+        let target = NSEdgeInsets(top: titlebar + 8, left: 0, bottom: 0, right: 0)
+        let current = scroll.contentInsets
+        if current.top != target.top {
+            scroll.contentInsets = target
+        }
     }
 
     func rebuild(state: SidebarState) {
@@ -632,7 +663,9 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .header = entry(at: row) { return 30 }
+        // HOME: Finder breathes between sections — tall header rows with the
+        // label pinned low create that air above each section.
+        if case .header = entry(at: row) { return 42 }
         return 28
     }
 
@@ -863,7 +896,7 @@ final class SidebarHeaderCell: NSTableCellView {
             chevron.centerYAnchor.constraint(equalTo: label.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: chevron.trailingAnchor, constant: 4),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -7),
         ])
     }
 

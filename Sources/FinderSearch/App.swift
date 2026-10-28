@@ -149,6 +149,23 @@ struct BrowserView: View {
             set: { keyboardFocus = $0 ? .search : nil })
     }
     // HOME: kept as properties so the body stays inside the type-checker budget.
+    private var toolbarSortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $model.sort) {
+                ForEach(FileSort.allCases, id: \.self) { sort in
+                    Text(sort.rawValue).tag(sort)
+                }
+            }
+            Toggle("Ascending", isOn: $model.ascending)
+            Toggle("Show Hidden Files", isOn: $model.showHidden)
+            Button("New Smart Folder…") {  // HOME: sidebar row was removed
+                NotificationCenter.default.post(name: .homeEditSmartRule, object: nil)
+            }
+        } label: {
+            GlassToolbarIcon(symbol: "arrow.up.arrow.down")
+        }.help("Sort")
+    }
+
     private var toolbarSearch: some View {
         let isExpanded = searchFocused || !model.query.isEmpty
         return ToolbarSearchButton(
@@ -256,38 +273,25 @@ struct BrowserView: View {
                         .padding(.horizontal, 6)
                 }
                 ToolbarItem {
-                    Menu {
-                        Picker("Sort By", selection: $model.sort) {
-                            ForEach(FileSort.allCases, id: \.self) { sort in
-                                Text(sort.rawValue).tag(sort)
-                            }
-                        }
-                        Toggle("Ascending", isOn: $model.ascending)
-                        Toggle("Show Hidden Files", isOn: $model.showHidden)
-        Button("New Smart Folder…") {  // HOME: sidebar row was removed
-            NotificationCenter.default.post(name: .homeEditSmartRule, object: nil)
-        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }.help("Sort")
+                    toolbarSortMenu
                 }
                 ToolbarItem {
                     ShareLink(items: model.selectedItems.map(\.url)) {
-                        Image(systemName: "square.and.arrow.up")
+                        GlassToolbarIcon(symbol: "square.and.arrow.up")
                     }.disabled(model.selection.isEmpty).help("Share")
                 }
                 ToolbarItem {
                     Menu {
                         ForEach(tags, id: \.0) { name, _ in Button(name) { model.tag(name) } }
                     } label: {
-                        Image(systemName: "tag")
+                        GlassToolbarIcon(symbol: "tag")
                     }.disabled(model.selection.isEmpty).help("Tags")
                 }
                 ToolbarItem {
                     Menu {
                         actions
                     } label: {
-                        Image(systemName: "ellipsis")
+                        GlassToolbarIcon(symbol: "ellipsis")
                     }.help("Actions")
                 }
                 ToolbarItem {  // HOME: update badge
@@ -773,8 +777,7 @@ struct BrowserView: View {
         return Button {
             if pending { showUpdates = true }
         } label: {
-            Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(Color.accentColor)
+            GlassToolbarIcon(symbol: "arrow.down.circle.fill", tint: Color.accentColor)
                 .opacity(pending ? 1 : 0)
                 .overlay(alignment: .topTrailing) {
                     if pending {
@@ -1034,5 +1037,22 @@ struct ToolbarSearchButton<Field: View>: View {
             }
         }
         .animation(.snappy(duration: 0.2), value: expanded)
+    }
+}
+
+
+/// HOME: Finder's toolbar icon treatment — each action sits in the subtle
+/// circular glass well the system gives Finder's buttons.
+struct GlassToolbarIcon: View {
+    let symbol: String
+    var tint: Color? = nil
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(tint ?? .primary)
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(.primary.opacity(0.09)))
+            .contentShape(Circle())
     }
 }

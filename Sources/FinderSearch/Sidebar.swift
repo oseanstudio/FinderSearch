@@ -263,6 +263,7 @@ struct BrowserSidebar: View, Equatable {
                 addFavoriteFolders: addFavoriteFolders,
                 eject: eject
             ))
+            .ignoresSafeArea(.container, edges: .top)  // HOME: Finder's full-height material
             if state.showDiskAccessHint {
                 Divider()
                 Button {
