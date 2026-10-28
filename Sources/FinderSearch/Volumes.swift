@@ -22,7 +22,7 @@ struct MountedVolume: Equatable, Identifiable, Sendable {
                 FileManager.default.mountedVolumeURLs(
                     includingResourceValuesForKeys: Array(keys), options: [.skipHiddenVolumes])
                 ?? []
-            return try urls.map { url in
+            var mapped = try urls.map { url in
                 try Task.checkCancellation()
                 let values = try? url.resourceValues(forKeys: keys)
                 return MountedVolume(
@@ -30,6 +30,22 @@ struct MountedVolume: Equatable, Identifiable, Sendable {
                     canEject: values?.volumeIsEjectable == true
                         || values?.volumeIsRemovable == true || values?.volumeIsInternal == false)
             }
+            // HOME: SMB and other network shares occasionally miss from the
+            // enumeration; anything mounted under /Volumes joins the list.
+            if let mounts = try? FileManager.default.contentsOfDirectory(  // HOME
+                at: URL(fileURLWithPath: "/Volumes"), includingPropertiesForKeys: [
+                    .isDirectoryKey, .isVolumeKey,
+                ])
+            {
+                let known = Set(mapped.map(\.url.standardizedFileURL.path))
+                for mount in mounts where !known.contains(mount.standardizedFileURL.path) {
+                    let values = try? mount.resourceValues(forKeys: [.isVolumeKey, .isDirectoryKey])
+                    if values?.isVolume == true || values?.isDirectory == true {
+                        mapped.append(MountedVolume(url: mount, canEject: true))
+                    }
+                }
+            }
+            return mapped
         }
     }
 

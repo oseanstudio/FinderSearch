@@ -148,6 +148,20 @@ struct BrowserView: View {
             get: { keyboardFocus == .search },
             set: { keyboardFocus = $0 ? .search : nil })
     }
+    // HOME: kept as properties so the body stays inside the type-checker budget.
+    private var toolbarSearch: some View {
+        let isExpanded = searchFocused || !model.query.isEmpty
+        return ToolbarSearchButton(
+            field: {
+                ToolbarSearchField(
+                    text: $model.query,
+                    focused: searchFocusBinding,
+                    onSubmit: { model.submitSearch() })
+            },
+            expand: { keyboardFocus = .search },
+            expanded: isExpanded)
+    }
+
     // HOME: the rule builder, presented from the sidebar's context menu.
     @State private var editingRule: HomeSmartRule?
     @State private var showRuleBuilder = false
@@ -156,6 +170,8 @@ struct BrowserView: View {
     @State private var browserWindow: NSWindow?
     @State private var iconSize: Double = 64
     @State private var gridColumns = 5
+    // HOME: the icon size actually drawn (capped by the fixed cell width).
+    @State private var cellIconSize: Double = 64
     // HOME: type-select buffer (keystrokes within one second join the prefix).
     @State private var typeSelectBuffer = ""
     @State private var typeSelectReset: Task<Void, Never>?
@@ -235,6 +251,9 @@ struct BrowserView: View {
                         }
                         Toggle("Ascending", isOn: $model.ascending)
                         Toggle("Show Hidden Files", isOn: $model.showHidden)
+        Button("New Smart Folder…") {  // HOME: sidebar row was removed
+            NotificationCenter.default.post(name: .homeEditSmartRule, object: nil)
+        }
                     } label: {
                         Image(systemName: "arrow.up.arrow.down")
                     }.help("Sort")
@@ -261,15 +280,11 @@ struct BrowserView: View {
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
                 }
-                // HOME: native search field that lives in the toolbar row;
-                // see ToolbarSearchField for why .searchable can't be used.
+                // HOME: Finder-style search — a compact circle at rest that
+                // expands into the field on click; see ToolbarSearchField for
+                // why .searchable can't be used.
                 ToolbarItem {
-                    ToolbarSearchField(
-                        text: $model.query,
-                        focused: searchFocusBinding,
-                        onSubmit: { model.submitSearch() }
-                    )
-                    .frame(width: 210, height: 24)
+                    toolbarSearch
                 }
             }
         }
@@ -328,6 +343,9 @@ struct BrowserView: View {
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
         ) { _ in workspace.refreshVolumes() }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in workspace.refreshVolumes() }  // HOME: SMB shares mounted meanwhile
         .onReceive(
             NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)
         ) { _ in workspace.refreshVolumes() }
@@ -488,13 +506,19 @@ struct BrowserView: View {
         }
     }
     private func updateColumns(_ width: Double) {
-        gridColumns = max(1, Int((width - 36) / (iconSize + 69)))
+        // HOME: columns are fixed by the default cell size so growing the
+        // thumbnail slider never drops columns — icons just fill their cell.
+        gridColumns = max(1, Int((width - 36) / (64.0 + 69.0)))
+        let spacing = 14.0
+        let cell = (width - 36 - spacing * Double(gridColumns - 1)) / Double(gridColumns)
+        cellIconSize = max(40, min(iconSize, cell - 30))
     }
     private func iconScroll(minHeight: Double) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: iconSize + 55), spacing: 14)],
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 14), count: gridColumns),
                     alignment: .leading, spacing: 18
                 ) {
                     ForEach(model.sortedHits) { hit in iconCell(hit) }
@@ -510,10 +534,15 @@ struct BrowserView: View {
     }
     private func iconCell(_ hit: Hit) -> some View {
         VStack(spacing: 6) {
-            FileThumbnail(hit: hit, size: iconSize).frame(
-                width: iconSize + 10, height: iconSize + 10)
+            FileThumbnail(hit: hit, size: cellIconSize).frame(
+                width: cellIconSize + 10, height: cellIconSize + 10)
             FileNameLabel(model: model, hit: hit, lineLimit: 2, centered: true)
                 .frame(height: 32, alignment: .top)
+            if HomeRoute(model.route) == .smart(.large) {  // HOME: sizes under items
+                Text(ByteCountFormatter.string(fromByteCount: Int64(hit.size), countStyle: .file))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .modifier(CutAppearance(path: hit.path))
         .padding(6).frame(maxWidth: .infinity)
@@ -653,6 +682,19 @@ struct BrowserView: View {
     }
 
     @ViewBuilder private var backgroundActions: some View {
+        Menu("Sort By") {  // HOME: Finder's right-click sort menu
+            Picker("Sort By", selection: $model.sort) {
+                ForEach(FileSort.allCases, id: \.self) { sort in
+                    Text(sort.rawValue).tag(sort)
+                }
+            }
+            Divider()
+            Picker("Direction", selection: $model.ascending) {
+                Text("Ascending").tag(true)
+                Text("Descending").tag(false)
+            }
+        }
+        Divider()
         Button("New Folder") { model.newFolder() }.disabled(model.busy || !model.canWriteHere)
         Button("New Text File") { model.newTextFile() }.disabled(model.busy || !model.canWriteHere)
         Button("Paste Items") { model.paste() }.disabled(model.busy || !model.canWriteHere)
@@ -669,6 +711,9 @@ struct BrowserView: View {
             }
         }
         Toggle("Show Hidden Files", isOn: $model.showHidden)
+        Button("New Smart Folder…") {  // HOME: sidebar row was removed
+            NotificationCenter.default.post(name: .homeEditSmartRule, object: nil)
+        }
         Button("Refresh") { model.schedule() }.disabled(model.busy)
     }
     @ViewBuilder private var actions: some View {
@@ -840,5 +885,35 @@ struct ToolbarSearchField: NSViewRepresentable {
             }
             return true
         }
+    }
+}
+
+// HOME: Finder's toolbar search shape — a small circle at rest that expands
+// into the field when clicked (or while focused/holding text).
+struct ToolbarSearchButton<Field: View>: View {
+    @ViewBuilder var field: () -> Field
+    var expand: () -> Void
+    var expanded: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if expanded {
+                field()
+                    .frame(width: 200, height: 22)
+                    .transition(.opacity)
+            } else {
+                Button(action: expand) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(.primary.opacity(0.08)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Search")
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: expanded)
     }
 }

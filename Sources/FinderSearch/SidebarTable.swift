@@ -88,7 +88,10 @@ struct SidebarTableActions {
 
         for section in layout.visibleSections {
             entries.append(.header(section))
-            entries.append(contentsOf: items(section: section, state: state, actions: actions))
+            if !layout.isCollapsed(section) {
+                entries.append(
+                    contentsOf: items(section: section, state: state, actions: actions))
+            }
         }
         return entries
     }
@@ -136,10 +139,6 @@ struct SidebarTableActions {
                         id: id, section: section, route: id, title: rule.name,
                         symbol: "slider.horizontal.3", kind: .rule(rule)))
                 }
-            entries.append(.item(SidebarItem(
-                id: "action:newSmartFolder", section: section, route: nil,
-                title: "New Smart Folder…", symbol: "plus", kind: .newSmartFolder,
-                run: { NotificationCenter.default.post(name: .homeEditSmartRule, object: nil) })))
             return entries
 
         case .favorites:
@@ -357,8 +356,12 @@ final class SidebarNSTableView: NSTableView {
     private func didSelect(row: Int, table: NSTableView) {
         guard !syncingSelection, let state, let entry = entry(at: row) else { return }
         switch entry {
-        case .header:
-            break
+        case .header(let section):
+            // Finder behavior: click a section header to collapse or open it.
+            var layout = SidebarLayout.load()
+            layout.toggleCollapsed(section)
+            layout.save()
+            table.deselectRow(row)
         case .item(let item):
             if let run = item.run {
                 run()
@@ -839,6 +842,7 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
 
 final class SidebarHeaderCell: NSTableCellView {
     private let label = NSTextField(labelWithString: "")
+    private let chevron = NSImageView()
     private weak var coordinator: SidebarTableCoordinator?
     private var row = 0
 
@@ -847,10 +851,17 @@ final class SidebarHeaderCell: NSTableCellView {
         identifier = NSUserInterfaceItemIdentifier("header")
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = .secondaryLabelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
+        chevron.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
+        chevron.contentTintColor = .tertiaryLabelColor
+        chevron.symbolConfiguration = .init(pointSize: 9, weight: .semibold)
+        for view in [chevron, label] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            chevron.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            chevron.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: chevron.trailingAnchor, constant: 4),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
             label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
@@ -863,6 +874,10 @@ final class SidebarHeaderCell: NSTableCellView {
         label.stringValue = section.title
         self.coordinator = coordinator
         self.row = row
+        // Finder's disclosure: chevron points right when collapsed, down when open.
+        let open = !SidebarLayout.load().isCollapsed(section)
+        let name = open ? "chevron.down" : "chevron.right"
+        chevron.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
     }
 
     override var menu: NSMenu? {

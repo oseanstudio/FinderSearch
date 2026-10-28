@@ -6,8 +6,8 @@ enum MouseNavigationCommand {
     static func command(type: NSEvent.EventType, button: Int) -> Self? {
         guard type == .otherMouseDown else { return nil }
         switch button {
-        case 3: return .back
-        case 4: return .forward
+        case 3, 8: return .back  // 8: some Logitech/MX mice
+        case 4, 9: return .forward
         default: return nil
         }
     }
@@ -35,6 +35,7 @@ final class MouseNavigationView: NSView {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         guard window != nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            NSLog("HEARTHMOUSE otherMouseDown button=\(event.buttonNumber) windowMatch=\(event.window === self?.window)")
             guard let self,
                 self.handle(
                     MouseNavigationCommand.command(type: event.type, button: event.buttonNumber),

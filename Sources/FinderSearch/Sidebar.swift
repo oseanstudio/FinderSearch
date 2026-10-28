@@ -81,8 +81,9 @@ struct SidebarLayout: Codable, Equatable {
     var sections: [SidebarSection]
     var hidden: Set<String>
     var itemOrder: [String: [String]] = [:]
+    var collapsed: Set<String> = []
 
-    private enum CodingKeys: String, CodingKey { case sections, hidden, itemOrder }
+    private enum CodingKeys: String, CodingKey { case sections, hidden, itemOrder, collapsed }
 
     init(sections: [SidebarSection], hidden: Set<String>) {
         self.sections = sections
@@ -98,6 +99,8 @@ struct SidebarLayout: Codable, Equatable {
         hidden = Set(try container.decode([String].self, forKey: .hidden))
         itemOrder =
             (try? container.decode([String: [String]].self, forKey: .itemOrder)) ?? [:]
+        collapsed = Set(
+            (try? container.decode([String].self, forKey: .collapsed)) ?? [])
     }
 
     func encode(to encoder: Encoder) throws {
@@ -106,6 +109,9 @@ struct SidebarLayout: Codable, Equatable {
         try container.encode(hidden.sorted(), forKey: .hidden)
         if !itemOrder.isEmpty {
             try container.encode(itemOrder, forKey: .itemOrder)
+        }
+        if !collapsed.isEmpty {
+            try container.encode(collapsed.sorted(), forKey: .collapsed)
         }
     }
 
@@ -149,10 +155,25 @@ struct SidebarLayout: Codable, Equatable {
         sections = Array(SidebarSection.allCases)
         hidden = []
         itemOrder = [:]
+        collapsed = []
+    }
+
+    func isCollapsed(_ section: SidebarSection) -> Bool {
+        collapsed.contains("sec:" + section.rawValue)
+    }
+
+    mutating func toggleCollapsed(_ section: SidebarSection) {
+        let id = "sec:" + section.rawValue
+        if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
     }
 
     var visibleSections: [SidebarSection] {
         sections.filter { !hidden.contains("sec:" + $0.rawValue) }
+    }
+
+    /// Sections that both exist and aren't collapsed open (headers render).
+    var openSections: [SidebarSection] {
+        visibleSections.filter { !collapsed.contains("sec:" + $0.rawValue) }
     }
 
     /// The section's items in the stored order, with anything not yet ordered
