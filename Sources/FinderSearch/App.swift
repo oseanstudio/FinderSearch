@@ -350,9 +350,6 @@ struct BrowserView: View {
         .sheet(isPresented: $showSidebarCustomize) {  // HOME
             CustomizeSidebarSheet()
         }
-        .sheet(isPresented: $showUpdates) {  // HOME
-            UpdatesSheet()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .homeEditSmartRule)) { note in  // HOME
             editingRule = note.object as? HomeSmartRule
             showRuleBuilder = true
@@ -795,6 +792,11 @@ struct BrowserView: View {
         }
         .disabled(!pending)
         .help(pending ? "Updates available" : "No pending updates")
+        // HOME: a popover (not a sheet) — clicking outside dismisses it. The
+        // item always exists, so the menu-bar trigger anchors here too.
+        .popover(isPresented: $showUpdates, arrowEdge: .bottom) {
+            UpdatesSheet()
+        }
     }
 
     @ViewBuilder private var backgroundActions: some View {

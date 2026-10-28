@@ -649,6 +649,7 @@ struct UpdatesSheet: View {
                             description: Text(
                                 "FinderSearch and DigUp have no new releases right now.")
                         )
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                     ForEach(center.offers) { offer in
                         UpdateOfferRow(offer: offer)
