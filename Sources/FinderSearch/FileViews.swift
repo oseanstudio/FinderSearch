@@ -211,7 +211,7 @@ struct GalleryBrowser<RowMenu: View>: View {
                                 .marqueeItem(hit.path, in: model.id)
                                 .id(hit.path)
                         }
-                    }.scrollTargetLayout().padding(12)
+                    }.padding(12)
                         .marqueeSelection(model: model, focusFiles: {})
                 }.frame(height: 115)
                     .scrollPosition(id: $model.scrollAnchor)
@@ -278,7 +278,7 @@ struct ColumnBrowser<RowMenu: View>: View {
                                                 .onTapGesture { pick(hit, at: index) }
                                                 .id(hit.path)
                                         }
-                                    }.scrollTargetLayout()
+                                    }
                                 }.scrollPosition(
                                     id: Binding(
                                         get: {

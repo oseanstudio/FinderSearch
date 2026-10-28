@@ -590,7 +590,7 @@ struct BrowserView: View {
                     alignment: .leading, spacing: 18
                 ) {
                     ForEach(model.sortedHits) { hit in iconCell(hit) }
-                }.scrollTargetLayout().padding(18)
+                }.padding(18)
                     .frame(minHeight: minHeight, alignment: .top)
                     .marqueeSelection(model: model, focusFiles: focusFiles)
             }
