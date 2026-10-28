@@ -197,7 +197,7 @@ struct SidebarState: Equatable {
     let ejectingVolumes: Set<String>
     let showDiskAccessHint: Bool
     // HOME: the user's sidebar layout (dragged sections, hidden items).
-    let layout: SidebarLayout
+    var layout: SidebarLayout
 
     @MainActor init(
         route: String, favorites: [String], volumes: [MountedVolume], ejectingVolumes: Set<String>,

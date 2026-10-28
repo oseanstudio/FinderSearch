@@ -254,59 +254,7 @@ struct BrowserView: View {
                     bottomBar
                 }
             }
-            .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    ControlGroup {
-                        Button {
-                            model.goBack()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }.disabled(model.backStack.isEmpty).help("Back")
-                        Button {
-                            model.goForward()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                        }.disabled(model.forwardStack.isEmpty).help("Forward")
-                    }
-                }
-                ToolbarItem {
-                    ViewModePicker(selection: $model.viewMode)
-                        .frame(width: 150, height: 28)
-                        .padding(.horizontal, 6)
-                }
-                ToolbarItem {
-                    toolbarSortMenu
-                }
-                ToolbarItem {
-                    ShareLink(items: model.selectedItems.map(\.url)) {
-                        GlassToolbarIcon(symbol: "square.and.arrow.up")
-                    }.disabled(model.selection.isEmpty).help("Share")
-                }
-                ToolbarItem {
-                    Menu {
-                        ForEach(tags, id: \.0) { name, _ in Button(name) { model.tag(name) } }
-                    } label: {
-                        GlassToolbarIcon(symbol: "tag")
-                    }.disabled(model.selection.isEmpty).help("Tags")
-                }
-                ToolbarItem {
-                    Menu {
-                        actions
-                    } label: {
-                        GlassToolbarIcon(symbol: "ellipsis")
-                    }.help("Actions")
-                }
-                ToolbarItem {  // HOME: update badge
-                    updatesBadgeButton
-                }
-                // HOME: Finder-style search — a compact circle at rest that
-                // expands into the field on click; see ToolbarSearchField for
-                // why .searchable can't be used.
-                ToolbarItem {
-                    toolbarSearch
-                }
-            }
+            .navigationTitle(model.title)  // HOME: native NSToolbar owns the rest
         }
         .background(BrowserWindowCapture { browserWindow = $0 }.frame(width: 0, height: 0))
         .background(
@@ -319,18 +267,21 @@ struct BrowserView: View {
         .onAppear {
             model.start()
             installKeyMonitor()
+            installNativeToolbar()  // HOME: Finder's own toolbar control
             QuickSearchController.shared.installHotkey()  // HOME
             updates.startMonitoring()  // HOME
         }
         .onChange(of: model.id) { _, _ in
             keyboardFocus = nil; fileNavigationActive = false
             model.start(); installKeyMonitor()
+            installNativeToolbar()  // each tab owns its toolbar wiring
         }
         .onDisappear {
             if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
-            fileNavigationActive = false; model.sort = .relevance; keyboardFocus = .search
+            fileNavigationActive = false; model.sort = .relevance
+            nativeToolbar?.beginSearch()  // HOME: native expanding search
         }
         .onReceive(NotificationCenter.default.publisher(for: .homeRunSavedSearch)) { note in  // HOME
             guard NSApp.keyWindow === browserWindow,
@@ -424,6 +375,21 @@ struct BrowserView: View {
         revealTarget = nil
         model.select(hit, extending: false, toggling: false)
         model.selectionNavigation.send((hit.path, false))
+    }
+
+    // HOME: a real NSToolbar — Finder's toolbar control (see NativeToolbar).
+    @State private var nativeToolbar: NativeToolbarController?
+
+    private func installNativeToolbar() {
+        guard let browserWindow else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { installNativeToolbar() }
+            return
+        }
+        let controller = nativeToolbar ?? NativeToolbarController(
+            model: model, workspace: workspace,
+            showUpdates: { showUpdates = true })
+        controller.install(on: browserWindow)
+        nativeToolbar = controller
     }
 
     private func installKeyMonitor() {

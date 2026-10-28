@@ -241,6 +241,7 @@ struct SidebarTableView: NSViewRepresentable {
         // window height under the titlebar (the browser adds ignoresSafeArea
         // on this view); rows clip below the titlebar via the content inset.
         scroll.verticalScroller?.scrollerStyle = .overlay
+        scroll.scrollerStyle = .overlay
         scroll.automaticallyAdjustsContentInsets = false
         context.coordinator.scroll = scroll
         context.coordinator.observeWindow(scroll)
@@ -300,6 +301,7 @@ final class SidebarNSTableView: NSTableView {
     var entries: [SidebarEntry] = []
     weak var scroll: NSScrollView?
     private var cancellables: Set<AnyCancellable> = []
+    private var suppressReload = false
     private var windowObserver: NSObjectProtocol?
 
     init(actions: SidebarTableActions) {
@@ -317,6 +319,7 @@ final class SidebarNSTableView: NSTableView {
 
     private func reloadFromModel() {
         guard let state else { return }
+        guard !suppressReload else { return }
         rebuild(state: state)
     }
 
@@ -345,7 +348,12 @@ final class SidebarNSTableView: NSTableView {
         self.state = state
         entries = SidebarEntries.build(state: state, actions: actions)
         guard let table = scroll?.documentView as? NSTableView else { return }
-        table.reloadData()
+        // Finder eases reorders in; a short crossfade matches it.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.allowsImplicitAnimation = true
+            table.reloadData()
+        }
         syncSelection(table: table)
     }
 
@@ -388,11 +396,36 @@ final class SidebarNSTableView: NSTableView {
         guard !syncingSelection, let state, let entry = entry(at: row) else { return }
         switch entry {
         case .header(let section):
-            // Finder behavior: click a section header to collapse or open it.
+            // Finder behavior: click a section header to collapse or open it,
+            // with the native slide animation.
             var layout = SidebarLayout.load()
             layout.toggleCollapsed(section)
+            let rows = IndexSet(
+                entries.indices.filter { index in
+                    if case .item(let item) = entries[index] {
+                        return item.section == section
+                    }
+                    return false
+                })
+            suppressReload = true
             layout.save()
+            suppressReload = false
+            let collapsed = layout.isCollapsed(section)
+            if let current = self.state {
+                var updated = current
+                updated.layout = layout
+                self.state = updated
+                entries = SidebarEntries.build(state: updated, actions: actions)
+            }
+            table.beginUpdates()
+            if collapsed {
+                table.removeRows(at: rows, withAnimation: .effectGap)
+            } else {
+                table.insertRows(at: rows, withAnimation: .effectGap)
+            }
+            table.endUpdates()
             table.deselectRow(row)
+            table.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
         case .item(let item):
             if let run = item.run {
                 run()
@@ -665,7 +698,7 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         // HOME: Finder breathes between sections — tall header rows with the
         // label pinned low create that air above each section.
-        if case .header = entry(at: row) { return 42 }
+        if case .header = entry(at: row) { return 44 }
         return 28
     }
 
@@ -896,7 +929,7 @@ final class SidebarHeaderCell: NSTableCellView {
             chevron.centerYAnchor.constraint(equalTo: label.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: chevron.trailingAnchor, constant: 4),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -7),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
         ])
     }
 
