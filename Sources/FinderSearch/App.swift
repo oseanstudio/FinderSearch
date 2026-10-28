@@ -16,7 +16,7 @@ import UniformTypeIdentifiers
             }
         }
         .defaultSize(width: 1050, height: 680).windowToolbarStyle(.unified)
-        MenuBarExtra("Hearth", systemImage: "arrow.down.circle") {  // HOME
+        MenuBarExtra("Hearth", systemImage: "magnifyingglass") {  // HOME
             MenuBarDownloadsView()
         }
         // Window style: the menu needs a live text field for its search bar.
