@@ -1024,7 +1024,15 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
             defer { ejectingVolumes.remove(volume.id) }
             do {
                 try await ejector(volume.url)
-                volumes.removeAll { $0.id == volume.id }
+                // HOME: the unmount call returns once it's *initiated*; network
+                // and slow disks finish afterwards. Keep spinning (and keep
+                // the volume listed) until the mount point is really gone.
+                guard await Self.waitUntilUnmounted(volume.url, timeout: 15) else {
+                    reportError(
+                        "\u{2018}\(volume.name)\u{2019} is still ejecting — try again in a moment.")
+                    refreshVolumes()
+                    return
+                }
                 for tab in tabs
                 where tab.location.path == volume.id || tab.location.path.hasPrefix(volume.id + "/")
                 {
@@ -1036,5 +1044,25 @@ struct FileJournal { let name: String; let operations: [FileMutation] }
             }
         }
     }
+    /// True once the mount point stops being reachable (volume really gone).
+    private static func waitUntilUnmounted(_ url: URL, timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            Task.detached {
+                let deadline = Date().addingTimeInterval(timeout)
+                while Date() < deadline {
+                    let reachable = (try? url.checkResourceIsReachable()) ?? false
+                    if !reachable {
+                        // Give the mount tables a beat to settle.
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        continuation.resume(returning: true)
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                continuation.resume(returning: false)
+            }
+        }
+    }
+
     deinit { volumeTask?.cancel() }
 }
