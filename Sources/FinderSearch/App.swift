@@ -87,6 +87,9 @@ import UniformTypeIdentifiers
                 }.keyboardShortcut(.upArrow)
                 Button("Go to Folder…") { model?.goToFolder() }.keyboardShortcut(
                     "g", modifiers: [.command, .shift])
+                Button("Connect to Server…") {  // HOME: mounts SMB/AFP shares
+                    connectToServerPrompt()
+                }.keyboardShortcut("k")
                 Divider()
                 ForEach(GoDestination.allCases) { destination in
                     Button(destination.title) { model?.sidebar(destination.route) }
@@ -1055,4 +1058,27 @@ struct GlassToolbarIcon: View {
             .background(Circle().fill(.primary.opacity(0.09)))
             .contentShape(Circle())
     }
+}
+
+
+/// HOME: Finder's Connect to Server. The URL mounts through the system
+/// (Finder handles any credential prompt); the share then appears under
+/// Locations via the mount notifications.
+@MainActor func connectToServerPrompt(refresh: @escaping () -> Void = {}) {
+    let alert = NSAlert()
+    alert.messageText = "Connect to Server"
+    alert.informativeText = "Enter a server address, like smb://server/share"
+    alert.addButton(withTitle: "Connect")
+    alert.addButton(withTitle: "Cancel")
+    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+    field.placeholderString = "smb://server/share"
+    alert.accessoryView = field
+    alert.window.initialFirstResponder = field
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    var text = field.stringValue.trimmingCharacters(in: .whitespaces)
+    if text.isEmpty { return }
+    if !text.contains("://") { text = "smb://" + text }
+    guard let url = URL(string: text) else { return }
+    NSWorkspace.shared.open(url)
+    refresh()
 }
