@@ -270,9 +270,6 @@ struct BrowserView: View {
             }
             .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    toolbarSearch
-                }
                 ToolbarItem(placement: .navigation) {
                     ControlGroup {
                         Button {
@@ -323,6 +320,12 @@ struct BrowserView: View {
                 }
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
+                }
+                // HOME: search last, right end. The flexible space before the
+                // tool cluster keeps the two groups from interacting.
+                ToolbarItem { Spacer().frame(width: 24) }
+                ToolbarItem {
+                    toolbarSearch
                 }
             }
         }
