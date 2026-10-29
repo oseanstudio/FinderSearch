@@ -174,6 +174,29 @@ struct BrowserView: View {
         }.help("Sort")
     }
 
+    // HOME: split-panes and terminal toggles (Shark's F3/F4).
+    private var toolbarSplitToggle: some View {
+        Button {
+            toggleSplitPane()
+        } label: {
+            GlassToolbarIcon(
+                symbol: "rectangle.split.2x1",
+                tint: showSplitPane ? Color.accentColor : Color.primary)
+        }
+        .help(showSplitPane ? "Close Split Panes (F3)" : "Split Panes (F3)")
+    }
+
+    private var toolbarTerminalToggle: some View {
+        Button {
+            showTerminal.toggle()
+        } label: {
+            GlassToolbarIcon(
+                symbol: "terminal",
+                tint: showTerminal ? Color.accentColor : Color.primary)
+        }
+        .help(showTerminal ? "Close Terminal (F4)" : "Terminal (F4)")
+    }
+
     private var toolbarSearch: some View {
         let isExpanded = searchFocused || !model.query.isEmpty
         return ToolbarSearchButton(
@@ -278,6 +301,13 @@ struct BrowserView: View {
                     } label: {
                         GlassToolbarIcon(symbol: "ellipsis")
                     }.help("Actions")
+                }
+                // HOME: split-panes and terminal toggles (Shark's F3/F4).
+                ToolbarItem {
+                    toolbarSplitToggle
+                }
+                ToolbarItem {
+                    toolbarTerminalToggle
                 }
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
