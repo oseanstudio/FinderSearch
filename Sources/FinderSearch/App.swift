@@ -160,62 +160,7 @@ struct BrowserView: View {
             })
     }
     // HOME: kept as properties so the body stays inside the type-checker budget.
-    private var toolbarSortMenu: some View {
-        Menu {
-            Picker("Sort By", selection: $model.sort) {
-                ForEach(FileSort.allCases, id: \.self) { sort in
-                    Text(sort.rawValue).tag(sort)
-                }
-            }
-            Toggle("Ascending", isOn: $model.ascending)
-            Toggle("Show Hidden Files", isOn: $model.showHidden)
-            Button("New Smart Folder…") {  // HOME: sidebar row was removed
-                NotificationCenter.default.post(name: .homeEditSmartRule, object: nil)
-            }
-        } label: {
-            GlassToolbarIcon(symbol: "arrow.up.arrow.down")
-        }.help("Sort")
-    }
-
     // HOME: split-panes and terminal toggles (Shark's F3/F4).
-    private var toolbarSplitToggle: some View {
-        Button {
-            toggleSplitPane()
-        } label: {
-            GlassToolbarIcon(
-                symbol: "rectangle.split.2x1",
-                tint: showSplitPane ? Color.accentColor : Color.primary)
-        }
-        .help(showSplitPane ? "Close Split Panes (F3)" : "Split Panes (F3)")
-    }
-
-    private var toolbarTerminalToggle: some View {
-        Button {
-            showTerminal.toggle()
-        } label: {
-            GlassToolbarIcon(
-                symbol: "terminal",
-                tint: showTerminal ? Color.accentColor : Color.primary)
-        }
-        .help(showTerminal ? "Close Terminal (F4)" : "Terminal (F4)")
-    }
-
-    private var toolbarSearch: some View {
-        let isExpanded = searchExpanded || searchFocused || !model.query.isEmpty
-        return ToolbarSearchButton(
-            field: {
-                ToolbarSearchField(
-                    text: $model.query,
-                    focused: searchFocusBinding,
-                    onSubmit: { model.submitSearch() })
-            },
-            expand: {
-                searchExpanded = true
-                keyboardFocus = .search
-            },
-            expanded: isExpanded)
-    }
-
     // HOME: reveal target while its folder loads (menu bar panel requests).
     @State private var revealTarget: String?
     // HOME: the rule builder, presented from the sidebar's context menu.
@@ -268,65 +213,10 @@ struct BrowserView: View {
                 detailBody
                 detailFooter
             }
-            .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    ControlGroup {
-                        Button {
-                            model.goBack()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }.disabled(model.backStack.isEmpty).help("Back")
-                        Button {
-                            model.goForward()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                        }.disabled(model.forwardStack.isEmpty).help("Forward")
-                    }
-                }
-                ToolbarItem {
-                    ViewModePicker(selection: $model.viewMode)
-                        .frame(width: 128, height: 26)
-                        .padding(.horizontal, 4)
-                }
-                ToolbarItem {
-                    toolbarSortMenu
-                }
-                ToolbarItem {
-                    ShareLink(items: model.selectedItems.map(\.url)) {
-                        GlassToolbarIcon(symbol: "square.and.arrow.up")
-                    }.disabled(model.selection.isEmpty).help("Share")
-                }
-                ToolbarItem {
-                    Menu {
-                        ForEach(tags, id: \.0) { name, _ in Button(name) { model.tag(name) } }
-                    } label: {
-                        GlassToolbarIcon(symbol: "tag")
-                    }.disabled(model.selection.isEmpty).help("Tags")
-                }
-                ToolbarItem {
-                    Menu {
-                        actions
-                    } label: {
-                        GlassToolbarIcon(symbol: "ellipsis")
-                    }.help("Actions")
-                }
-                // HOME: split-panes and terminal toggles (Shark's F3/F4).
-                ToolbarItem {
-                    toolbarSplitToggle
-                }
-                ToolbarItem {
-                    toolbarTerminalToggle
-                }
-                ToolbarItem {  // HOME: update badge
-                    updatesBadgeButton
-                }
-                // HOME: search last, right end. The flexible space before the
-                // tool cluster keeps the two groups from interacting.
-                ToolbarItem { Spacer().frame(width: 24) }
-                ToolbarItem {
-                    toolbarSearch
-                }
+            // HOME: popover for the toolbar bell's updates panel (click
+            // outside dismisses it).
+            .popover(isPresented: $showUpdates, arrowEdge: .bottom) {
+                UpdatesSheet()
             }
         }
         .background(BrowserWindowCapture { browserWindow = $0 }.frame(width: 0, height: 0))
@@ -340,6 +230,7 @@ struct BrowserView: View {
         .onAppear {
             model.start()
             installKeyMonitor()
+            installNativeToolbar()  // HOME: Finder's own toolbar control
             QuickSearchController.shared.installHotkey()  // HOME
             updates.startMonitoring()  // HOME
         }
@@ -351,7 +242,8 @@ struct BrowserView: View {
             if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
-            fileNavigationActive = false; model.sort = .relevance; keyboardFocus = .search
+            fileNavigationActive = false; model.sort = .relevance
+            nativeToolbar?.beginSearch()  // HOME: native expanding search
         }
         .onReceive(NotificationCenter.default.publisher(for: .homeRunSavedSearch)) { note in  // HOME
             guard NSApp.keyWindow === browserWindow,
@@ -533,6 +425,25 @@ struct BrowserView: View {
             splitModel = SearchModel()
             splitModel.navigate(model.location)
         }
+    }
+
+    // HOME: a real NSToolbar — Finder's toolbar control (NativeToolbar.swift).
+    @State private var nativeToolbar: NativeToolbarController?
+
+    private func installNativeToolbar() {
+        guard let browserWindow else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { installNativeToolbar() }
+            return
+        }
+        let controller = nativeToolbar ?? NativeToolbarController(
+            model: model, workspace: workspace,
+            showUpdates: { showUpdates = true })
+        controller.install(
+            on: browserWindow,
+            split: (isOn: { showSplitPane }, toggle: { toggleSplitPane() }),
+            terminal: (isOn: { showTerminal }, toggle: { showTerminal.toggle() }),
+            showUpdates: { showUpdates = true })
+        nativeToolbar = controller
     }
 
     private func installKeyMonitor() {
@@ -895,33 +806,6 @@ struct BrowserView: View {
     // item always exists — appearing/disappearing toolbar items re-layout the
     // toolbar mid-session, which on this OS evicts the .searchable field into
     // an empty full-width row below the toolbar.
-    private var updatesBadgeButton: some View {
-        let pending = !updates.offers.isEmpty
-        return Button {
-            if pending { showUpdates = true }
-        } label: {
-            GlassToolbarIcon(symbol: "arrow.down.circle.fill", tint: Color.accentColor)
-                .opacity(pending ? 1 : 0)
-                .overlay(alignment: .topTrailing) {
-                    if pending {
-                        Text("\(updates.offers.count)")
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(2).frame(minWidth: 12)
-                            .background(Capsule().fill(Color.red))
-                            .foregroundStyle(Color.white)
-                            .offset(x: 6, y: -6)
-                    }
-                }
-        }
-        .disabled(!pending)
-        .help(pending ? "Updates available" : "No pending updates")
-        // HOME: a popover (not a sheet) — clicking outside dismisses it. The
-        // item always exists, so the menu-bar trigger anchors here too.
-        .popover(isPresented: $showUpdates, arrowEdge: .bottom) {
-            UpdatesSheet()
-        }
-    }
-
     @ViewBuilder private var backgroundActions: some View {
         Menu("Sort By") {  // HOME: Finder's right-click sort menu
             Picker("Sort By", selection: $model.sort) {
