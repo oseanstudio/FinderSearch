@@ -1151,10 +1151,7 @@ struct ToolbarSearchButton<Field: View>: View {
                 Button(action: expand) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(.primary.opacity(0.08)))
-                        .contentShape(Circle())
+                        .foregroundStyle(.primary)
                 }
                 .buttonStyle(.plain)
                 .help("Search")
