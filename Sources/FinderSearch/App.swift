@@ -302,6 +302,11 @@ struct BrowserView: View {
                         GlassToolbarIcon(symbol: "ellipsis")
                     }.help("Actions")
                 }
+                // HOME: search sits with the action buttons; see
+                // ToolbarSearchField for why .searchable can't be used.
+                ToolbarItem {
+                    toolbarSearch
+                }
                 // HOME: split-panes and terminal toggles (Shark's F3/F4).
                 ToolbarItem {
                     toolbarSplitToggle
@@ -311,12 +316,6 @@ struct BrowserView: View {
                 }
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
-                }
-                // HOME: Finder-style search — a compact circle at rest that
-                // expands into the field on click; see ToolbarSearchField for
-                // why .searchable can't be used.
-                ToolbarItem {
-                    toolbarSearch
                 }
             }
         }
@@ -1149,9 +1148,7 @@ struct ToolbarSearchButton<Field: View>: View {
                     .transition(.opacity)
             } else {
                 Button(action: expand) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
+                    GlassToolbarIcon(symbol: "magnifyingglass")
                 }
                 .buttonStyle(.plain)
                 .help("Search")
@@ -1167,11 +1164,18 @@ struct ToolbarSearchButton<Field: View>: View {
 struct GlassToolbarIcon: View {
     let symbol: String
     var tint: Color? = nil
+    @State private var hovering = false
 
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(tint ?? .primary)
+            .shadow(
+                color: .black.opacity(hovering ? 0.35 : 0),
+                radius: hovering ? 3 : 0, y: hovering ? 1 : 0)
+            .animation(.easeOut(duration: 0.08), value: hovering)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
     }
 }
 
