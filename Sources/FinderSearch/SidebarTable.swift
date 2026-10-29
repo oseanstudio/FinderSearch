@@ -696,9 +696,9 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        // HOME: Finder's measured rhythm — 32pt row pitch, 56pt of air above
-        // each section header, ~24pt below the header to the first row.
-        if case .header = entry(at: row) { return 78 }
+        // HOME: Shark's rhythm — 32pt rows, 26pt headers, 14pt between
+        // sections (github.com/andronasef/shark).
+        if case .header = entry(at: row) { return 36 }
         return 32
     }
 
@@ -915,7 +915,7 @@ final class SidebarHeaderCell: NSTableCellView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         identifier = NSUserInterfaceItemIdentifier("header")
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
         label.textColor = .secondaryLabelColor
         chevron.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
         chevron.contentTintColor = .tertiaryLabelColor

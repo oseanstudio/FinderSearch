@@ -141,6 +141,11 @@ struct BrowserView: View {
     // sidebar sees the change (UserDefaults alone would not re-render it).
     @State private var sidebarLayout = SidebarLayout.load()
     @State private var showSidebarCustomize = false
+    // HOME: embedded terminal drawer (F4) and dual panes (F3), like Shark.
+    @State private var showTerminal = false
+    @State private var terminalSession = HearthTerminalSession()
+    @State private var showSplitPane = false
+    @State private var splitModel = SearchModel()
     private enum KeyboardFocus: Hashable { case files, search }
     @FocusState private var keyboardFocus: KeyboardFocus?
     private var searchFocused: Bool { keyboardFocus == .search }
@@ -227,32 +232,9 @@ struct BrowserView: View {
             ).equatable()
         } detail: {
             VStack(spacing: 0) {
-                if workspace.tabs.count > 1 { BrowserTabBar(workspace: workspace) }
-                if model.isSearch { searchScopeBar; HomeSearchChipsBar(model: model) }  // HOME
-                if let error = model.error {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle");
-                        Text(error).font(.callout).textSelection(.enabled); Spacer();
-                        Button {
-                            model.error = nil
-                        } label: {
-                            Image(systemName: "xmark")
-                        }.buttonStyle(.plain)
-                    }.padding(12).background(Color(nsColor: .controlBackgroundColor)); Divider()
-                }
-                fileContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .contextMenu { backgroundActions }
-                    .modifier(SafeBackgroundDropTarget(model: model))
-                    .focusable(model.viewMode == .icons || model.viewMode == .gallery)
-                    .focused($keyboardFocus, equals: .files).focusEffectDisabled()
-                // HOME: the Search route has its own single bottom row (its
-                // status plus actions); the shared bar's crumbs, item count
-                // and icon slider mean nothing there.
-                if HomeRoute(model.route) != .semantic {
-                    bottomBar
-                }
+                detailHeader
+                detailBody
+                detailFooter
             }
             .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
             .toolbar {
@@ -426,6 +408,94 @@ struct BrowserView: View {
         model.selectionNavigation.send((hit.path, false))
     }
 
+    private var detailHeader: some View {
+        VStack(spacing: 0) {
+            if workspace.tabs.count > 1 { BrowserTabBar(workspace: workspace) }
+            if model.isSearch { searchScopeBar; HomeSearchChipsBar(model: model) }  // HOME
+            if model.error != nil { errorBanner; Divider() }
+        }
+    }
+
+    private var detailBody: some View {
+        paneContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contextMenu { backgroundActions }
+            .modifier(SafeBackgroundDropTarget(model: model))
+            .focusable(model.viewMode == .icons || model.viewMode == .gallery)
+            .focused($keyboardFocus, equals: .files).focusEffectDisabled()
+    }
+
+    /// The Search route has its own single bottom row; the shared bar's
+    /// crumbs, item count and icon slider mean nothing there.
+    private var detailFooter: some View {
+        VStack(spacing: 0) {
+            if HomeRoute(model.route) != .semantic { bottomBar }
+            if showTerminal {  // HOME: Shark-style terminal drawer (F4)
+                TerminalPanel(
+                    session: terminalSession, isPresented: $showTerminal,
+                    currentDirectory: model.location)
+            }
+        }
+    }
+
+    private var errorBanner: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle")
+            Text(model.error ?? "").font(.callout).textSelection(.enabled)
+            Spacer()
+            Button {
+                model.error = nil
+            } label: {
+                Image(systemName: "xmark")
+            }.buttonStyle(.plain)
+        }.padding(12).background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    // HOME: split panes (Shark's F3) — the file area beside a second one.
+    @ViewBuilder private var paneContent: some View {
+        if showSplitPane {
+            HSplitView {
+                fileContent.frame(maxWidth: .infinity, maxHeight: .infinity)
+                splitPane.frame(minWidth: 240)
+            }
+        } else {
+            fileContent.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var splitPane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {  // Shark's pane header
+                Circle().fill(Color.secondary.opacity(0.4)).frame(width: 8, height: 8)
+                Text(splitModel.location.lastPathComponent)
+                    .font(.system(size: 11)).lineLimit(1)
+                Spacer()
+                Button {
+                    showSplitPane = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Close Split View (F3)")
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+            Divider()
+            SplitPaneBrowser(model: splitModel, contextMenu: { AnyView(backgroundActions) })
+        }
+    }
+
+    // HOME: split panes (Shark's F3) — a second browsing pane beside the
+    // first, starting in the same folder.
+    private func toggleSplitPane() {
+        showSplitPane.toggle()
+        if showSplitPane {
+            splitModel = SearchModel()
+            splitModel.navigate(model.location)
+        }
+    }
+
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -433,6 +503,20 @@ struct BrowserView: View {
             if let command = TabShortcut.command(for: event), !browserWindow.isSheet {
                 if command == .new { workspace.newTab() } else { workspace.reopenClosedTab() }
                 return nil
+            }
+            // HOME: F3 splits panes, F4 toggles the terminal drawer.
+            if event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                let characters = event.charactersIgnoringModifiers,
+                let scalar = characters.unicodeScalars.first
+            {
+                if scalar.value == 0xF705 && !browserWindow.isSheet {  // F3
+                    toggleSplitPane()
+                    return nil
+                }
+                if scalar.value == 0xF706 && !browserWindow.isSheet {  // F4
+                    showTerminal.toggle()
+                    return nil
+                }
             }
             // HOME: ⌘=/⌘− zoom thumbnails (column count follows the size).
             if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.option) {
@@ -827,6 +911,11 @@ struct BrowserView: View {
             ForEach(FileViewMode.allCases, id: \.self) { mode in
                 Button(mode.title) { model.viewMode = mode }
             }
+            Divider()
+            Toggle("Split Panes (F3)", isOn: Binding(  // HOME
+                get: { showSplitPane }, set: { _ in toggleSplitPane() }))
+            Toggle("Terminal (F4)", isOn: Binding(  // HOME
+                get: { showTerminal }, set: { _ in showTerminal.toggle() }))
             Divider()
             Menu("Icons per Row") {  // HOME: icon-view density; 0 = auto
                 Button("Automatically") { userColumns = 0 }
