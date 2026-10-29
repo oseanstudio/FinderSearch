@@ -54,6 +54,33 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
         install(on: window)
     }
 
+    private var clickMonitor: Any?
+
+    private func watchClicks(in window: NSWindow) {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
+            [weak self] event in
+            guard let self, let item = self.searchItem,
+                item.searchField.window?.firstResponder === item.searchField.currentEditor()
+                    || self.searchActive
+            else { return event }
+            let fieldFrame = item.searchField.convert(
+                item.searchField.bounds, to: nil)
+            let inWindow = event.window === window
+            if inWindow && !fieldFrame.contains(event.locationInWindow) {
+                item.endSearchInteraction()
+            }
+            return event
+        }
+    }
+
+    var searchActive: Bool {
+        guard let item = searchItem else { return false }
+        return item.searchField.stringValue.isEmpty
+            && item.searchField.window?.firstResponder === item.searchField.currentEditor()
+            ? true : false
+    }
+
     func install(on window: NSWindow) {
         if self.window === window, let toolbar { window.toolbar = toolbar; return }
         cancellables.removeAll()
@@ -67,9 +94,12 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
         self.toolbar = toolbar
         self.window = window
         bind()
+        watchClicks(in: window)
     }
 
     func detach() {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
         window?.toolbar = nil
         window = nil
         toolbar = nil
@@ -191,6 +221,13 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
             group.subitems = [back, forward]
             backItem = back
             forwardItem = forward
+            // HOME: when search expands, fold into the >> overflow like Finder.
+            let overflow = NSMenuItem(title: "Back / Forward", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            submenu.addItem(menuItem("Back", #selector(performBack)))
+            submenu.addItem(menuItem("Forward", #selector(performForward)))
+            overflow.submenu = submenu
+            group.menuFormRepresentation = overflow
             syncNavigation()
             return group
         case .viewSwitcher:
@@ -217,6 +254,18 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
             let size = NSSize(width: 168, height: 26)
             item.minSize = size
             item.maxSize = size
+            let overflow = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for mode in FileViewMode.allCases {
+                let entry = NSMenuItem(
+                    title: mode.title, action: #selector(performViewSwitchOverflow(_:)),
+                    keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = mode.title
+                submenu.addItem(entry)
+            }
+            overflow.submenu = submenu
+            item.menuFormRepresentation = overflow
             return item
         case .sortItem:
             let item = NSToolbarItem(itemIdentifier: .sortItem)
@@ -245,6 +294,10 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
         case .shareItem:
             let item = NSSharingServicePickerToolbarItem(itemIdentifier: .shareItem)
             item.delegate = self
+            let overflow = NSMenuItem(
+                title: "Share", action: #selector(performShareOverflow(_:)), keyEquivalent: "")
+            overflow.target = self
+            item.menuFormRepresentation = overflow
             shareItem = item
             return item
         case .tagsItem:
@@ -281,7 +334,10 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
                 systemSymbolName: "rectangle.split.2x1", accessibilityDescription: "Split Panes")
             item.target = self
             item.action = #selector(performToggleSplit(_:))
-            item.toolTip = splitIsOn() ? "Close Split Panes (F3)" : "Split Panes (F3)"
+            let splitTitle = splitIsOn() ? "Close Split Panes (F3)" : "Split Panes (F3)"
+            item.toolTip = splitTitle
+            item.menuFormRepresentation = menuItem(
+                splitTitle, #selector(performToggleSplitFromMenu(_:)))
             return item
         case .terminalItem:
             let item = NSToolbarItem(itemIdentifier: .terminalItem)
@@ -291,7 +347,10 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
                 systemSymbolName: "terminal", accessibilityDescription: "Terminal")
             item.target = self
             item.action = #selector(performToggleTerminal(_:))
-            item.toolTip = terminalIsOn() ? "Close Terminal (F4)" : "Terminal (F4)"
+            let terminalTitle = terminalIsOn() ? "Close Terminal (F4)" : "Terminal (F4)"
+            item.toolTip = terminalTitle
+            item.menuFormRepresentation = menuItem(
+                terminalTitle, #selector(performToggleTerminalFromMenu(_:)))
             return item
         case .updatesItem:
             let item = NSToolbarItem(itemIdentifier: .updatesItem)
@@ -307,6 +366,8 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
             item.minSize = size
             item.maxSize = size
             bellButton = button
+            item.menuFormRepresentation = menuItem(
+                "Check for Updates…", #selector(performUpdates(_:)))
             return item
         case .searchItem:
             let item = NSSearchToolbarItem(itemIdentifier: .searchItem)
@@ -422,6 +483,30 @@ final class NativeToolbarController: NSObject, NSToolbarDelegate {
     @objc private func performToggleTerminal(_ sender: NSToolbarItem) {
         toggleTerminal()
         sender.toolTip = terminalIsOn() ? "Close Terminal (F4)" : "Terminal (F4)"
+    }
+
+    @objc private func performViewSwitchOverflow(_ sender: NSMenuItem) {
+        if let title = sender.representedObject as? String,
+            let mode = FileViewMode.allCases.first(where: { $0.title == title })
+        {
+            model.viewMode = mode
+        }
+    }
+
+    @objc private func performToggleSplitFromMenu(_ sender: NSMenuItem) {
+        toggleSplit()
+    }
+
+    @objc private func performToggleTerminalFromMenu(_ sender: NSMenuItem) {
+        toggleTerminal()
+    }
+
+    @objc private func performShareOverflow(_ sender: NSMenuItem) {
+        guard let view = window?.contentView else { return }
+        let picker = NSSharingServicePicker(items: model.selectedItems.map(\.url))
+        picker.show(
+            relativeTo: NSRect(x: view.bounds.midX, y: 0, width: 1, height: 1),
+            of: view, preferredEdge: .minY)
     }
 
     @objc private func performUpdates(_ sender: NSButton) {
