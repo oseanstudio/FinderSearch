@@ -1170,20 +1170,11 @@ struct ToolbarSearchButton<Field: View>: View {
 struct GlassToolbarIcon: View {
     let symbol: String
     var tint: Color? = nil
-    @State private var hovering = false
-
-    @Environment(\.isEnabled) private var isDisabled
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(tint ?? .primary)
-            .frame(width: 26, height: 26)
-            .background(
-                Circle().fill(Color.primary.opacity(hovering ? 0.16 : 0.09)))
-            .contentShape(Circle())
-            .opacity(isDisabled ? 0.4 : 1)
-            .onHover { if !isDisabled { hovering = $0 } }
     }
 }
 
