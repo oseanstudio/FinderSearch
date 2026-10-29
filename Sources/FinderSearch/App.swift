@@ -270,6 +270,9 @@ struct BrowserView: View {
             }
             .navigationTitle(model.isSearch ? "Searching “\(model.query)”" : model.title)
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    toolbarSearch
+                }
                 ToolbarItem(placement: .navigation) {
                     ControlGroup {
                         Button {
@@ -286,8 +289,8 @@ struct BrowserView: View {
                 }
                 ToolbarItem {
                     ViewModePicker(selection: $model.viewMode)
-                        .frame(width: 150, height: 28)
-                        .padding(.horizontal, 6)
+                        .frame(width: 128, height: 26)
+                        .padding(.horizontal, 4)
                 }
                 ToolbarItem {
                     toolbarSortMenu
@@ -320,11 +323,6 @@ struct BrowserView: View {
                 }
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
-                }
-                // HOME: search last, like Finder. Expansion is plain state;
-                // see ToolbarSearchField for why .searchable can't be used.
-                ToolbarItem {
-                    toolbarSearch
                 }
             }
         }
@@ -1153,7 +1151,7 @@ struct ToolbarSearchButton<Field: View>: View {
         HStack(spacing: 0) {
             if expanded {
                 field()
-                    .frame(width: 200, height: 22)
+                    .frame(width: 260, height: 22)
                     .transition(.opacity)
             } else {
                 Button(action: expand) {
