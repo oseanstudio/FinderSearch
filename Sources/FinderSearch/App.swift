@@ -486,7 +486,7 @@ struct BrowserView: View {
         if showSplitPane {
             HSplitView {
                 fileContent.frame(maxWidth: .infinity, maxHeight: .infinity)
-                splitPane.frame(minWidth: 240)
+                splitPane.frame(minWidth: 320, idealWidth: 320, maxWidth: 420)
             }
         } else {
             fileContent.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1170,14 +1170,17 @@ struct ToolbarSearchButton<Field: View>: View {
 struct GlassToolbarIcon: View {
     let symbol: String
     var tint: Color? = nil
+    @State private var hovering = false
 
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(tint ?? .primary)
+            .foregroundStyle(tint ?? (hovering ? .primary : .secondary))
             .frame(width: 26, height: 26)
-            .background(Circle().fill(.primary.opacity(0.09)))
+            .background(
+                Circle().fill(Color.primary.opacity(hovering ? 0.16 : 0.09)))
             .contentShape(Circle())
+            .onHover { hovering = $0 }
     }
 }
 
