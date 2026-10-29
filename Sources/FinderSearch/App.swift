@@ -153,8 +153,11 @@ struct BrowserView: View {
     // body expression stays inside the type-checker's budget).
     private var searchFocusBinding: Binding<Bool> {
         Binding(
-            get: { keyboardFocus == .search },
-            set: { keyboardFocus = $0 ? .search : nil })
+            get: { keyboardFocus == .search || searchExpanded },
+            set: {
+                searchExpanded = $0
+                keyboardFocus = $0 ? .search : nil
+            })
     }
     // HOME: kept as properties so the body stays inside the type-checker budget.
     private var toolbarSortMenu: some View {
@@ -198,7 +201,7 @@ struct BrowserView: View {
     }
 
     private var toolbarSearch: some View {
-        let isExpanded = searchFocused || !model.query.isEmpty
+        let isExpanded = searchExpanded || searchFocused || !model.query.isEmpty
         return ToolbarSearchButton(
             field: {
                 ToolbarSearchField(
@@ -206,7 +209,10 @@ struct BrowserView: View {
                     focused: searchFocusBinding,
                     onSubmit: { model.submitSearch() })
             },
-            expand: { keyboardFocus = .search },
+            expand: {
+                searchExpanded = true
+                keyboardFocus = .search
+            },
             expanded: isExpanded)
     }
 
@@ -226,6 +232,9 @@ struct BrowserView: View {
     // HOME: show each item's size under its name in icon view (Finder's
     // "Show Item Info"); the Large Files route always shows sizes.
     @AppStorage("home.showItemInfo") private var showItemInfo = false
+    // HOME: the toolbar search's expansion — plain state, so clicking the
+    // button always reveals the field regardless of focus plumbing.
+    @State private var searchExpanded = false
     @State private var gridWidth: Double = 0
     // HOME: the biggest thumbnail the current columns can show without
     // sideways scrolling; the slider's upper bound.
@@ -302,11 +311,6 @@ struct BrowserView: View {
                         GlassToolbarIcon(symbol: "ellipsis")
                     }.help("Actions")
                 }
-                // HOME: search sits with the action buttons; see
-                // ToolbarSearchField for why .searchable can't be used.
-                ToolbarItem {
-                    toolbarSearch
-                }
                 // HOME: split-panes and terminal toggles (Shark's F3/F4).
                 ToolbarItem {
                     toolbarSplitToggle
@@ -316,6 +320,11 @@ struct BrowserView: View {
                 }
                 ToolbarItem {  // HOME: update badge
                     updatesBadgeButton
+                }
+                // HOME: search last, like Finder. Expansion is plain state;
+                // see ToolbarSearchField for why .searchable can't be used.
+                ToolbarItem {
+                    toolbarSearch
                 }
             }
         }
