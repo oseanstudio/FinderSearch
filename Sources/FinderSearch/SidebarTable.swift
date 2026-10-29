@@ -216,7 +216,7 @@ struct SidebarTableView: NSViewRepresentable {
         table.headerView = nil
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
-        table.rowHeight = 28
+        table.rowHeight = 32
         table.intercellSpacing = NSSize(width: 0, height: 0)
         table.selectionHighlightStyle = .regular
         table.style = .inset
@@ -696,10 +696,10 @@ extension SidebarTableCoordinator: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        // HOME: Finder breathes between sections — tall header rows with the
-        // label pinned low create that air above each section.
-        if case .header = entry(at: row) { return 44 }
-        return 28
+        // HOME: Finder's measured rhythm — 32pt row pitch, 56pt of air above
+        // each section header, ~24pt below the header to the first row.
+        if case .header = entry(at: row) { return 78 }
+        return 32
     }
 
     func tableView(_ tableView: NSTableView, typeSelectStringFor tableColumn: NSTableColumn?, row: Int)
